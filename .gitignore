@@ -1,0 +1,6 @@
+go.sum
+build/
+pnpm-lock.yaml
+pnpm-workspace.yaml
+node_modules/
+dist/
