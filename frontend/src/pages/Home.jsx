@@ -1,18 +1,13 @@
 import { useState } from "react"
 import Editor from "./Editor"
-import { javascript } from "@codemirror/lang-javascript"
-import { html } from '@codemirror/lang-html'
-import { go } from "@codemirror/lang-go"
+
 
 import Header from "../components/editor/Header"
 import LeftBar from "../components/editor/LeftBar"
 import Workspace from "../components/editor/Workspace"
+import {langMap,detectLang} from "../vars/langMap"
+import Footer from "../components/editor/Footer";
 
-const langMap = {
-  js: javascript,
-  html: html,
-  go:go,
-}
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("explorer")
@@ -24,11 +19,7 @@ export default function Home() {
   const [tabs, setTabs] = useState([]) // {path,name,content,language}
   const [activePath, setActivePath] = useState(null)
 
-  function detectLang(name = "") {
-    if (name.endsWith(".js")) return "js"
-    
-    return "js"
-  }
+
 
   function openFile(file) {
     setTabs((prev) => {
@@ -94,6 +85,7 @@ export default function Home() {
           {/* TABS BAR */}
           <div className="h-8 flex items-center gap-2 px-2 bg-[#111] overflow-x-auto">
             {tabs.map((t) => (
+           
               <div
                 key={t.path}
                 onClick={() => setActivePath(t.path)}
@@ -133,8 +125,13 @@ export default function Home() {
     </div>
   ))}
 </div>
-        </main>
-      </div>
+
+
+
+  </main>
+      </div><Footer file_type={
+   tabs.map((t) => (t.path === activePath ? detectLang(t.name): ""))}
+   />
     </div>
   )
 }

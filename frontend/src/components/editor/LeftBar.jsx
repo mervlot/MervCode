@@ -1,14 +1,10 @@
 import { useState } from "react";
+import tabs from "../../vars/sideBarTabs";
 
 export default function LeftBar({ onTabChange }) {
   const [activeTab, setActiveTab] = useState("explorer");
 
-  const tabs = [
-    { id: "explorer", iconClass: "bi bi-files", label: "Explorer" },
-    { id: "search", iconClass: "bi bi-search", label: "Search" },
-    { id: "source-control", iconClass: "bi bi-git", label: "Source Control" },
-    { id: "extensions", iconClass: "bi bi-puzzle", label: "Extensions" },
-  ];
+
 
   const handleTabClick = (tabId) => {
     setActiveTab(tabId);
@@ -63,7 +59,7 @@ export default function LeftBar({ onTabChange }) {
 
               {/* Cyan indicator line on the left side of active button */}
               {isActive && (
-                <div className="absolute left-0 top-2 bottom-2 w-[2px] bg-cyan-400 rounded-r" />
+                <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-cyan-400 rounded-r" />
               )}
             </button>
           );
@@ -94,7 +90,7 @@ export default function LeftBar({ onTabChange }) {
         >
           <i className="bi bi-gear" />
           {activeTab === "settings" && (
-            <div className="absolute left-0 top-2 bottom-2 w-[2px] bg-cyan-400 rounded-r" />
+            <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-cyan-400 rounded-r" />
           )}
         </button>
       </div>
