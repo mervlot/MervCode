@@ -1,0 +1,25 @@
+// vars/footerLangMap.js
+
+export const footerLangMap = {
+  js: "JavaScript",
+  jsx: "React JSX",
+  ts: "TypeScript",
+  tsx: "React TSX",
+  html: "HTML",
+  css: "CSS",
+  json: "JSON",
+  md: "Markdown",
+  py: "Python",
+  java: "Java",
+  c: "C",
+  cpp: "C++",
+  cs: "C#",
+  go: "Go",
+  rs: "Rust",
+  php: "PHP",
+  rb: "Ruby",
+  swift: "Swift",
+  kt: "Kotlin",
+  sh: "Shell",
+  txt: "Text",
+};

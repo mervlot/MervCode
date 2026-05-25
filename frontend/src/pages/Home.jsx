@@ -1,64 +1,62 @@
-import { useState } from "react"
-import Editor from "./Editor"
+import { useState } from "react";
+import Editor from "./Editor";
 
-
-import Header from "../components/editor/Header"
-import LeftBar from "../components/editor/LeftBar"
-import Workspace from "../components/editor/Workspace"
-import {langMap,detectLang} from "../vars/langMap"
+import Header from "../components/editor/Header";
+import LeftBar from "../components/editor/LeftBar";
+import Workspace from "../components/editor/Workspace";
+import { langMap, detectLang } from "../vars/langMap";
 import Footer from "../components/editor/Footer";
 
-
 export default function Home() {
-  const [activeTab, setActiveTab] = useState("explorer")
+  const [cursor, setCursor] = useState({
+    line: 1,
+    column: 1,
+  });
+  const [activeTab, setActiveTab] = useState("explorer");
 
-  const [sidebarWidth, setSidebarWidth] = useState(260)
-  const [dragging, setDragging] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [dragging, setDragging] = useState(false);
 
   // tabs
-  const [tabs, setTabs] = useState([]) // {path,name,content,language}
-  const [activePath, setActivePath] = useState(null)
-
-
+  const [tabs, setTabs] = useState([]); // {path,name,content,language}
+  const [activePath, setActivePath] = useState(null);
 
   function openFile(file) {
     setTabs((prev) => {
-      const exists = prev.find((t) => t.path === file.path)
-      if (exists) return prev
-      return [...prev, file]
-    })
-    setActivePath(file.path)
+      const exists = prev.find((t) => t.path === file.path);
+      if (exists) return prev;
+      return [...prev, file];
+    });
+    setActivePath(file.path);
   }
 
   function closeTab(path) {
-    setTabs((prev) => prev.filter((t) => t.path !== path))
-    setActivePath((prevActive) =>
-      prevActive === path ? null : prevActive
-    )
+    setTabs((prev) => prev.filter((t) => t.path !== path));
+    setActivePath((prevActive) => (prevActive === path ? null : prevActive));
   }
 
-  const activeFile = tabs.find((t) => t.path === activePath)
+  const activeFile = tabs.find((t) => t.path === activePath);
 
   const startResize = () => {
-    setDragging(true)
+    setDragging(true);
 
     const onMove = (e) => {
-      const newWidth = e.clientX - 48
+      const newWidth = e.clientX - 48;
 
       if (newWidth >= 180 && newWidth <= 500) {
-        setSidebarWidth(newWidth)
+        setSidebarWidth(newWidth);
       }
-    }
+    };
 
     const onUp = () => {
-      setDragging(false)
-      window.removeEventListener("mousemove", onMove)
-      window.removeEventListener("mouseup", onUp)
-    }
+      setDragging(false);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
 
-    window.addEventListener("mousemove", onMove)
-    window.addEventListener("mouseup", onUp)
-  }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
 
   return (
     <div className="w-full h-screen flex flex-col bg-[#050505] overflow-hidden select-none">
@@ -68,7 +66,10 @@ export default function Home() {
         <LeftBar onTabChange={setActiveTab} />
 
         {/* WORKSPACE */}
-        <div style={{ width: sidebarWidth }} className="h-full shrink-0 relative">
+        <div
+          style={{ width: sidebarWidth }}
+          className="h-full shrink-0 relative"
+        >
           <Workspace activeTab={activeTab} onFileOpen={openFile} />
 
           <div
@@ -81,11 +82,9 @@ export default function Home() {
 
         {/* EDITOR + TABS */}
         <main className="flex-1 h-full min-w-0 flex flex-col bg-[#282c34]">
-          
           {/* TABS BAR */}
           <div className="h-8 flex items-center gap-2 px-2 bg-[#111] overflow-x-auto">
             {tabs.map((t) => (
-           
               <div
                 key={t.path}
                 onClick={() => setActivePath(t.path)}
@@ -99,8 +98,8 @@ export default function Home() {
 
                 <span
                   onClick={(e) => {
-                    e.stopPropagation()
-                    closeTab(t.path)
+                    e.stopPropagation();
+                    closeTab(t.path);
                   }}
                   className="ml-2 text-red-400"
                 >
@@ -110,28 +109,30 @@ export default function Home() {
             ))}
           </div>
 
-         {/* EDITOR */}
-<div className="flex-1 min-h-0">
-  {tabs.map((t) => (
-    <div
-      key={t.path}
-      className={`h-full ${t.path === activePath ? "block" : "hidden"}`}
-    >
-      <Editor
-        language={langMap[detectLang(t.name)]}
-        doc={t.content}
-        filePath={t.path}
+          {/* EDITOR */}
+          <div className="flex-1 min-h-0">
+            {tabs.map((t) => (
+              <div
+                key={t.path}
+                className={`h-full ${t.path === activePath ? "block" : "hidden"}`}
+              >
+                <Editor
+                  language={langMap[detectLang(t.name)]}
+                  doc={t.content}
+                  filePath={t.path}
+                  onCursorChange={setCursor}
+                />
+              </div>
+            ))}
+          </div>
+        </main>
+      </div>
+      <Footer
+        fileType={activeFile ? detectLang(activeFile.name) : "txt"}
+        line={cursor.line}
+        column={cursor.column}
       />
+      
     </div>
-  ))}
-</div>
-
-
-
-  </main>
-      </div><Footer file_type={
-   tabs.map((t) => (t.path === activePath ? detectLang(t.name): ""))}
-   />
-    </div>
-  )
+  );
 }

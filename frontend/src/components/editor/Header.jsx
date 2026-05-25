@@ -1,5 +1,5 @@
 import { useState } from "react";
-
+import {Quit} from "../../../wailsjs/go/main/App"; // Import the Quit function from the generated Go bindings
 export default function Header({ recent }) {
   const [isMaximized, setIsMaximized] = useState(false);
 
@@ -31,7 +31,7 @@ export default function Header({ recent }) {
   // Close handler
   const handleClose = () => {
     try {
-      window.runtime.WindowClose();
+      Quit();
     } catch (err) {
       console.error("Failed to close window:", err);
     }
@@ -45,11 +45,8 @@ export default function Header({ recent }) {
       "
     >
       {/* LEFT */}
-      <div className="flex items-center gap-3 min-w-55">
-        <div className="w-4 h-4 rotate-45 border border-cyan-400 flex items-center justify-center">
-          <div className="w-1.5 h-1.5 bg-cyan-400" />
-        </div>
-
+      {/* LEFT */}
+      <div className="flex items-center gap-3">
         <span className="text-sm font-semibold tracking-wide text-white">
           MervCode
         </span>

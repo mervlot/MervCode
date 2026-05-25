@@ -69,3 +69,6 @@ func (a *App) ReadFile(path string) (string, error) {
 	}
 	return string(data), nil
 }
+func (a *App) Quit() {
+    runtime.Quit(a.ctx)
+}
