@@ -6,6 +6,8 @@ export function FolderDialog():Promise<string>;
 
 export function Greet(arg1:string):Promise<string>;
 
+export function LintCode(arg1:string):Promise<Array<main.Diagnostic>>;
+
 export function Quit():Promise<void>;
 
 export function ReadDir(arg1:string):Promise<Array<main.FileItem>>;

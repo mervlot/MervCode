@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -18,6 +21,15 @@ type FileItem struct {
 	Path     string     `json:"path"`
 	IsDir    bool       `json:"isDir"`
 	Children []FileItem `json:"children,omitempty"`
+}
+
+type Diagnostic struct {
+	Line      int    `json:"line"`
+	Column    int    `json:"column"`
+	EndLine   int    `json:"endLine"`
+	EndColumn int    `json:"endColumn"`
+	Message   string `json:"message"`
+	Severity  string `json:"severity"`
 }
 
 func NewApp() *App {
@@ -38,7 +50,6 @@ func (a *App) FolderDialog() (string, error) {
 
 func (a *App) ReadDir(path string) ([]FileItem, error) {
 	entries, err := os.ReadDir(path)
-
 	if err != nil {
 		return nil, err
 	}
@@ -69,6 +80,65 @@ func (a *App) ReadFile(path string) (string, error) {
 	}
 	return string(data), nil
 }
+
+// =======================
+// ESLINT BACKEND BRIDGE
+// =======================
+func (a *App) LintCode(code string) ([]Diagnostic, error) {
+	fmt.Println("===== LINT START =====")
+
+	cmd := exec.Command("node", "backend/eslint-runner.js")
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		fmt.Println("[ERROR] stdin pipe:", err)
+		return nil, err
+	}
+
+	outPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		fmt.Println("[ERROR] stdout pipe:", err)
+		return nil, err
+	}
+
+	if err := cmd.Start(); err != nil {
+		fmt.Println("[ERROR] start:", err)
+		return nil, err
+	}
+
+	// write input
+	_, err = stdin.Write([]byte(code))
+	if err != nil {
+		fmt.Println("[ERROR] write:", err)
+		return nil, err
+	}
+	stdin.Close()
+
+	// read output
+	out, err := io.ReadAll(outPipe)
+	if err != nil {
+		fmt.Println("[ERROR] read stdout:", err)
+		return nil, err
+	}
+
+	err = cmd.Wait()
+	if err != nil {
+		fmt.Println("[ERROR] process:", err)
+		return nil, err
+	}
+
+	fmt.Println("RAW OUTPUT:")
+	fmt.Println(string(out))
+
+	var result []Diagnostic
+	if err := json.Unmarshal(out, &result); err != nil {
+		fmt.Println("[ERROR] json:", err)
+		return nil, err
+	}
+
+	fmt.Println("===== LINT END =====")
+	return result, nil
+}
 func (a *App) Quit() {
-    runtime.Quit(a.ctx)
+	runtime.Quit(a.ctx)
 }

@@ -1,24 +1,26 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Editor from "./Editor";
 
 import Header from "../components/editor/Header";
 import LeftBar from "../components/editor/LeftBar";
 import Workspace from "../components/editor/Workspace";
-import { langMap, detectLang } from "../vars/langMap";
 import Footer from "../components/editor/Footer";
+
+import { detectLang } from "../editor/detectLang";
+import { buildExtensions } from "../editor/buildExtensions";
 
 export default function Home() {
   const [cursor, setCursor] = useState({
     line: 1,
     column: 1,
   });
+
   const [activeTab, setActiveTab] = useState("explorer");
 
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [dragging, setDragging] = useState(false);
 
-  // tabs
-  const [tabs, setTabs] = useState([]); // {path,name,content,language}
+  const [tabs, setTabs] = useState([]);
   const [activePath, setActivePath] = useState(null);
 
   function openFile(file) {
@@ -58,6 +60,13 @@ export default function Home() {
     window.addEventListener("mouseup", onUp);
   };
 
+  // ✅ FIXED DEPENDENCY (this was missing activeFile)
+  const activeExtensions = useMemo(() => {
+    if (!activeFile) return [];
+    const langKey = detectLang(activeFile.name);
+    return buildExtensions(langKey);
+  }, [activeFile]);
+
   return (
     <div className="w-full h-screen flex flex-col bg-[#050505] overflow-hidden select-none">
       <Header recent={activeFile?.name || ""} />
@@ -65,7 +74,6 @@ export default function Home() {
       <div className="flex-1 w-full flex min-h-0">
         <LeftBar onTabChange={setActiveTab} />
 
-        {/* WORKSPACE */}
         <div
           style={{ width: sidebarWidth }}
           className="h-full shrink-0 relative"
@@ -80,9 +88,7 @@ export default function Home() {
           />
         </div>
 
-        {/* EDITOR + TABS */}
         <main className="flex-1 h-full min-w-0 flex flex-col bg-[#282c34]">
-          {/* TABS BAR */}
           <div className="h-8 flex items-center gap-2 px-2 bg-[#111] overflow-x-auto">
             {tabs.map((t) => (
               <div
@@ -109,16 +115,17 @@ export default function Home() {
             ))}
           </div>
 
-          {/* EDITOR */}
           <div className="flex-1 min-h-0">
             {tabs.map((t) => (
               <div
                 key={t.path}
-                className={`h-full ${t.path === activePath ? "block" : "hidden"}`}
+                className={`h-full overflow-scroll ${
+                  t.path === activePath ? "block" : "hidden"
+                }`}
               >
                 <Editor
-                  language={langMap[detectLang(t.name)]}
                   doc={t.content}
+                  extensions={activeExtensions}
                   filePath={t.path}
                   onCursorChange={setCursor}
                 />
@@ -127,12 +134,12 @@ export default function Home() {
           </div>
         </main>
       </div>
+
       <Footer
         fileType={activeFile ? detectLang(activeFile.name) : "txt"}
         line={cursor.line}
         column={cursor.column}
       />
-      
     </div>
   );
 }

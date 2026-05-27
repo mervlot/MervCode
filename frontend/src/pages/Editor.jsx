@@ -1,48 +1,57 @@
 import { useEffect, useRef } from "react";
 import { EditorView, keymap } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
-import { basicSetup } from "codemirror";
-import { customKeymap } from "../vars/keymap";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { Compartment } from "@codemirror/state";
 import { defaultKeymap } from "@codemirror/commands";
+import { customKeymap } from "../vars/keymap";
+import { formatDocument } from "../editor/format";
+import { editorRegistry, fallbackRegistry } from "../editor/registry";
 
-export default function Editor({ language, doc = "", onCursorChange }) {
+export default function Editor({
+  doc = "",
+  langKey = "js",
+  extensions = [],
+  onCursorChange,
+  onReady,
+}) {
   const ref = useRef(null);
   const viewRef = useRef(null);
+
+  const extCompartment = useRef(new Compartment());
 
   useEffect(() => {
     if (!ref.current) return;
 
-    const fullHeightTheme = EditorView.theme({
-      "&": { height: "100%" },
-      ".cm-scroller": { overflow: "auto" },
-    });
-
     const cursorListener = EditorView.updateListener.of((update) => {
       if (update.selectionSet || update.docChanged) {
         const pos = update.state.selection.main.head;
-
         const line = update.state.doc.lineAt(pos);
 
-        const lineNumber = line.number;
-        const column = pos - line.from + 1;
-
         onCursorChange?.({
-          line: lineNumber,
-          column,
+          line: line.number,
+          column: pos - line.from + 1,
         });
       }
+    });
+
+    const formatKey = EditorView.domEventHandlers({
+      keydown: (event, view) => {
+        if (event.key === "F12") {
+          event.preventDefault();
+          formatFile(view);
+          return true;
+        }
+        return false;
+      },
     });
 
     const state = EditorState.create({
       doc,
       extensions: [
-        basicSetup,
-        oneDark,
-        fullHeightTheme,
+        extCompartment.current.of([ ...extensions]),
         cursorListener,
+        formatKey,
         keymap.of([...defaultKeymap, ...customKeymap]),
-        typeof language === "function" ? language() : [],
       ],
     });
 
@@ -52,9 +61,19 @@ export default function Editor({ language, doc = "", onCursorChange }) {
     });
 
     viewRef.current = view;
+    onReady?.(view);
 
     return () => view.destroy();
   }, []);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+
+    view.dispatch({
+      effects: extCompartment.current.reconfigure(extensions),
+    });
+  }, [extensions]);
 
   useEffect(() => {
     const view = viewRef.current;
@@ -72,5 +91,22 @@ export default function Editor({ language, doc = "", onCursorChange }) {
     });
   }, [doc]);
 
-  return <div ref={ref} className="w-full h-full min-h-0 bg-inherit" />;
+  const formatFile = async (view) => {
+    const config = editorRegistry[langKey] || fallbackRegistry;
+
+    const code = view.state.doc.toString();
+    const formatted = await config.formatter?.(code);
+
+    if (!formatted || formatted === code) return;
+
+    view.dispatch({
+      changes: {
+        from: 0,
+        to: view.state.doc.length,
+        insert: formatted,
+      },
+    });
+  };
+
+  return <div ref={ref} className="w-full h-full min-h-0" />;
 }

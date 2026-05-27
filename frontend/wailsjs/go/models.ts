@@ -1,5 +1,27 @@
 export namespace main {
 	
+	export class Diagnostic {
+	    line: number;
+	    column: number;
+	    endLine: number;
+	    endColumn: number;
+	    message: string;
+	    severity: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Diagnostic(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.line = source["line"];
+	        this.column = source["column"];
+	        this.endLine = source["endLine"];
+	        this.endColumn = source["endColumn"];
+	        this.message = source["message"];
+	        this.severity = source["severity"];
+	    }
+	}
 	export class FileItem {
 	    name: string;
 	    path: string;
