@@ -8,7 +8,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 )
 
-//go:embed all:frontend/dist
+//go:embed all:frontend/dist/*
 var assets embed.FS
 
 func main() {
@@ -17,7 +17,7 @@ func main() {
 
 	// Create application with options
 err := wails.Run(&options.App{
-	Title:  "d-app",
+	Title:  "merv-code",
 
 	Width:  1100,
 	Height: 700,

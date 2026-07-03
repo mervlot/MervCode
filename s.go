@@ -38,6 +38,9 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	exec.Command("typescript-language-server", "--stdio")
+exec.Command("biome", "lsp-proxy")
+
 }
 
 func (a *App) FolderDialog() (string, error) {

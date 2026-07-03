@@ -6,3 +6,5 @@ node_modules/
 dist/
 *.syso
 .git/
+icons/
+KPM

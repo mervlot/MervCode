@@ -1,5 +1,4 @@
-@import 'tailwindcss';
-
+@import "tailwindcss";
 
 html,
 body,
@@ -10,16 +9,65 @@ body,
   overflow: hidden;
 }
 
-* {
-  box-sizing: border-box;
+/* Default arrow */
+body {
+  cursor: url("./assets/cursor/pointer.cur"), default;
 }
+
+/* Text editing */
+input,
+textarea,
+[contenteditable="true"] {
+  cursor: url("./assets/cursor/text.cur"), text;
+}
+
+/* CodeMirror text editing should use the standard text caret */
+.cm-editor,
+.cm-editor .cm-content,
+.cm-editor .cm-gutters {
+  cursor: text !important;
+}
+
+/* Links */
+a,
+button,
+[role="button"] {
+  cursor: url("./assets/cursor/link.cur"), pointer;
+}
+
+/* Disabled */
+:disabled,
+[aria-disabled="true"] {
+  cursor: url("./assets/cursor/unavailable.cur"), not-allowed;
+}
+
+/* Dragging */
 .draggable {
   --wails-draggable: drag;
+  cursor: url("./assets/cursor/move.cur"), move;
 }
 
 .no-drag {
   --wails-draggable: no-drag;
 }
+
+/* Resize cursors */
+.resize-horizontal {
+  cursor: url("./assets/cursor/horz.cur"), ew-resize;
+}
+
+.resize-vertical {
+  cursor: url("./assets/cursor/vert.cur"), ns-resize;
+}
+
+.resize-diagonal-1 {
+  cursor: url("./assets/cursor/dgn1.cur"), nwse-resize;
+}
+
+.resize-diagonal-2 {
+  cursor: url("./assets/cursor/dgn2.cur"), nesw-resize;
+}
+
 /* Chrome / Edge / Safari */
 ::-webkit-scrollbar {
   width: 10px;
@@ -42,6 +90,7 @@ body,
 
 /* Firefox */
 * {
+  box-sizing: border-box;
   scrollbar-width: thin;
   scrollbar-color: #3a3a3a #0f0f0f;
 }
