@@ -12,41 +12,37 @@ import (
 var assets embed.FS
 
 func main() {
+	// Boot the background process bridge for JS/TS language services
+
+
 	// Create an instance of the app structure
 	app := NewApp()
 
 	// Create application with options
-err := wails.Run(&options.App{
-	Title:  "merv-code",
+	err := wails.Run(&options.App{
+		Title: "merv-code",
 
-	Width:  1100,
-	Height: 700,
+		Width:  1100,
+		Height: 700,
 
-	MinWidth:  800,
-	MinHeight: 500,
+		MinWidth:  800,
+		MinHeight: 500,
 
-	DisableResize: false,
-	StartHidden:   false,
+		DisableResize: false,
+		StartHidden:   false,
 
-	Frameless: true,
+		Frameless: true,
 
-	AssetServer: &assetserver.Options{
-		Assets: assets,
-	},
+		AssetServer: &assetserver.Options{
+			Assets: assets,
+		},
 
-	// BackgroundColour: &options.RGBA{
-	// 	R: 15,
-	// 	G: 15,
-	// 	B: 18,
-	// 	A: 1,
-	// },
+		OnStartup: app.startup,
 
-	OnStartup: app.startup,
-
-	Bind: []interface{}{
-		app,
-	},
-})
+		Bind: []interface{}{
+			app,
+		},
+	})
 	if err != nil {
 		println("Error:", err.Error())
 	}

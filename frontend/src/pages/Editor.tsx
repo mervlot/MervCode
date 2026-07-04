@@ -1,120 +1,101 @@
 import { useEffect, useRef } from "react";
-import { EditorView, keymap } from "@codemirror/view";
-import { EditorState, Compartment } from "@codemirror/state";
-import type { Extension } from "@codemirror/state";
-import { defaultKeymap } from "@codemirror/commands";
-import { customKeymap } from "../vars/keymap";
-import { formatDocument } from "../editor/format";
-import { editorRegistry, fallbackRegistry } from "../editor/registry";
+import * as monaco from "monaco-editor";
+
+import { setupMonaco } from "../editor/monaco/setup";
+import { applyLanguageFeatures } from "../editor/monaco/apply";
 
 interface EditorProps {
   doc?: string;
   langKey?: string;
-  extensions?: Extension[];
+  path?: string;
   onCursorChange?: (pos: { line: number; column: number }) => void;
-  onReady?: (view: EditorView) => void;
+  onReady?: (editor: monaco.editor.IStandaloneCodeEditor) => void;
 }
 
 export default function Editor({
   doc = "",
-  langKey = "js",
-  extensions = [],
+  langKey = "plaintext",
+  path = "active_file.txt",
   onCursorChange,
   onReady,
 }: EditorProps) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const viewRef = useRef<EditorView | null>(null);
-
-  const extCompartment = useRef(new Compartment());
+  const containerRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const modelRef = useRef<monaco.editor.ITextModel | null>(null);
 
   useEffect(() => {
-    if (!ref.current) return;
+    setupMonaco();
 
-    const cursorListener = EditorView.updateListener.of((update) => {
-      if (update.selectionSet || update.docChanged) {
-        const pos = update.state.selection.main.head;
-        const line = update.state.doc.lineAt(pos);
+    if (!containerRef.current) return;
 
-        onCursorChange?.({
-          line: line.number,
-          column: pos - line.from + 1,
-        });
-      }
-    });
+    const uri = monaco.Uri.file(path);
 
-    const formatKey = EditorView.domEventHandlers({
-      keydown: (event, view) => {
-        if (event.key === "F12") {
-          event.preventDefault();
-          formatFile(view);
-          return true;
-        }
-        return false;
+    const model =
+      monaco.editor.getModel(uri) ??
+      monaco.editor.createModel(doc, langKey, uri);
+
+    modelRef.current = model;
+
+    const editor = monaco.editor.create(containerRef.current, {
+      model,
+      automaticLayout: true,
+      minimap: {
+        enabled: false,
       },
+      fontLigatures: true,
+      smoothScrolling: true,
+      tabSize: 2,
+      insertSpaces: true,
+      formatOnPaste: true,
+      formatOnType: true,
     });
 
-    const state = EditorState.create({
-      doc,
-      extensions: [
-        extCompartment.current.of([...extensions]),
-        cursorListener,
-        formatKey,
-        keymap.of([...defaultKeymap, ...customKeymap]),
-      ],
+    editorRef.current = editor;
+
+    // 👇 Apply formatter, linter, LSP, snippets...
+    applyLanguageFeatures(langKey, editor, model);
+
+    editor.onDidChangeCursorPosition((e) => {
+      onCursorChange?.({
+        line: e.position.lineNumber,
+        column: e.position.column,
+      });
     });
 
-    const view = new EditorView({
-      state,
-      parent: ref.current,
-    });
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
+      () => {
+        editor.getAction("editor.action.formatDocument")?.run();
+      },
+    );
 
-    viewRef.current = view;
-    onReady?.(view);
+    onReady?.(editor);
 
-    return () => view.destroy();
+    return () => {
+      editor.dispose();
+      model.dispose();
+    };
   }, []);
 
   useEffect(() => {
-    const view = viewRef.current;
-    if (!view) return;
+    const model = modelRef.current;
+    if (!model) return;
 
-    view.dispatch({
-      effects: extCompartment.current.reconfigure(extensions),
-    });
-  }, [extensions]);
-
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view) return;
-
-    const current = view.state.doc.toString();
-    if (current === doc) return;
-
-    view.dispatch({
-      changes: {
-        from: 0,
-        to: current.length,
-        insert: doc,
-      },
-    });
+    if (model.getValue() !== doc) {
+      model.setValue(doc);
+    }
   }, [doc]);
 
-  const formatFile = async (view: EditorView) => {
-    const config = editorRegistry[langKey] || fallbackRegistry;
+  useEffect(() => {
+    const model = modelRef.current;
+    if (!model) return;
 
-    const code = view.state.doc.toString();
-    const formatted = await config.formatter?.(code);
+    monaco.editor.setModelLanguage(model, langKey);
 
-    if (!formatted || formatted === code) return;
+    if (editorRef.current) {
+      applyLanguageFeatures(langKey, editorRef.current, model);
+    }
+  }, [langKey]);
 
-    view.dispatch({
-      changes: {
-        from: 0,
-        to: view.state.doc.length,
-        insert: formatted,
-      },
-    });
-  };
-
-  return <div ref={ref} className='w-full h-full min-h-0' />;
+  return <div ref={containerRef} className='w-full h-full min-h-0' />;
 }

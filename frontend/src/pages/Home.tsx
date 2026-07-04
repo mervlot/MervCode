@@ -8,7 +8,7 @@ import ExplorerPanel from "../components/editor/ExplorerPanel.jsx";
 import StatusBar from "../components/editor/StatusBar.jsx";
 
 import { detectLang } from "../editor/detectLang.js";
-import { buildExtensions } from "../editor/buildExtensions.js";
+
 import { loadWorkspaceState, saveWorkspaceState } from "../lib/persistence.js";
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
@@ -357,11 +357,10 @@ export default function Home() {
     window.addEventListener("mouseup", onUp);
   };
 
-  const activeExtensions = useMemo(() => {
-    if (!activeFile) return [];
-    const langKey = detectLang(activeFile.name);
-    return buildExtensions(langKey);
-  }, [activeFile]);
+const language = useMemo(() => {
+  if (!activeFile) return "plaintext";
+  return detectLang(activeFile.name);
+}, [activeFile]);
 
   return (
     <div className='w-full h-screen flex flex-col bg-[#0e0e1c] overflow-hidden select-none'>
@@ -553,11 +552,11 @@ export default function Home() {
                   key={t.path}
                   className={`h-full overflow-scroll ${t.path === activePath ? "block" : "hidden"}`}
                 >
-                  <Editor
-                    doc={t.content ?? ""}
-                    extensions={activeExtensions}
-                    onCursorChange={setCursor}
-                  />
+                 <Editor
+  doc={t.content ?? ""}
+  langKey={language}
+  onCursorChange={setCursor}
+/>
                 </div>
               ))}
             </div>

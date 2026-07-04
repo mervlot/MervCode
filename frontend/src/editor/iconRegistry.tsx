@@ -5,26 +5,35 @@ import { FolderDialog, ReadDir, ReadFile } from "../../wailsjs/go/main/App";
    ICON IMPORTS
    (these may be URLs OR components depending on bundler)
 ------------------------------ */
-import JSIcon from "../../assets/icons/javascript.svg";
-import TSIcon from "../../assets/icons/typescript.svg";
-import ReactIcon from "../../assets/icons/react.svg";
-import JSONIcon from "../../assets/icons/json.svg";
-import MarkdownIcon from "../../assets/icons/markdown.svg";
-import HTMLIcon from "../../assets/icons/html.svg";
-import CSSIcon from "../../assets/icons/css.svg";
-import PythonIcon from "../../assets/icons/python.svg";
-import GoIcon from "../../assets/icons/go.svg";
-import RustIcon from "../../assets/icons/rust.svg";
-import PHPIcon from "../../assets/icons/php.svg";
-import ExeIcon from "../../assets/icons/exe.svg";
-import FileIcon_ from "../../assets/icons/file.svg";
-import FolderIcon from "../../assets/icons/folder.svg";
-import FolderOpenIcon from "../../assets/icons/folder-open.svg";
-
+import JSIcon from "../assets/icons/javascript.svg";
+import TSIcon from "../assets/icons/typescript.svg";
+import ReactIcon from "../assets/icons/react.svg";
+import JSONIcon from "../assets/icons/json.svg";
+import MarkdownIcon from "../assets/icons/markdown.svg";
+import HTMLIcon from "../assets/icons/html.svg";
+import CSSIcon from "../assets/icons/css.svg";
+import PythonIcon from "../assets/icons/python.svg";
+import GoIcon from "../assets/icons/go.svg";
+import RustIcon from "../assets/icons/rust.svg";
+import PHPIcon from "../assets/icons/php.svg";
+import ExeIcon from "../assets/icons/exe.svg";
+import FileIcon_ from "../assets/icons/file.svg";
+import FolderIcon from "../assets/icons/folder.svg";
+import FolderOpenIcon from "../assets/icons/folder-open.svg";
+import GitIcon from "../assets/icons/git.svg";
+import GitHubFolderIcon from "../assets/icons/folder-github.svg";
+import GitHubFolderOpenIcon from "../assets/icons/folder-github-open.svg";
+import GitLabIcon from "../assets/icons/gitlab.svg";
+import BitbucketIcon from "../assets/icons/bitbucket.svg";
+import GitPodIcon from "../assets/icons/gitpod.svg";
+import ImageIcon from "../assets/icons/image.svg";
+import DiskImageIcon from "../assets/icons/disk-image.svg";
 /* -----------------------------
    FILE ICON MAP
 ------------------------------ */
-type IconSource = string | ((props: { className?: string | undefined }) => JSX.Element);
+type IconSource =
+  | string
+  | ((props: { className?: string | undefined }) => JSX.Element);
 
 const fileIconMap: Record<string, IconSource> = {
   js: JSIcon,
@@ -39,11 +48,24 @@ const fileIconMap: Record<string, IconSource> = {
   go: GoIcon,
   rs: RustIcon,
   php: PHPIcon,
-  png: FileIcon_,
-  jpg: FileIcon_,
-  svg: FileIcon_,
+  png: ImageIcon,
+  jpg: ImageIcon,
+  svg: ImageIcon,
   txt: FileIcon_,
   exe: ExeIcon,
+  gitignore: GitIcon,
+};
+
+type FolderIconDefinition = {
+  closed: IconSource;
+  open: IconSource;
+};
+
+const folderIconMap: Record<string, FolderIconDefinition> = {
+  ".git": { closed: GitIcon, open: GitIcon },
+  git: { closed: GitIcon, open: GitIcon },
+  ".github": { closed: GitHubFolderIcon, open: GitHubFolderOpenIcon },
+  github: { closed: GitHubFolderIcon, open: GitHubFolderOpenIcon },
 };
 
 /* -----------------------------
@@ -75,7 +97,25 @@ type FileIconComponentProps = {
 
 function FileIconComponent({ item, isOpen }: FileIconComponentProps) {
   if (item.isDir) {
-    const Icon = isOpen ? FolderOpenIcon : FolderIcon;
+    const normalizedName = item.name.toLowerCase();
+    const normalizedPath = item.path.toLowerCase();
+
+    const folderIcon = Object.entries(folderIconMap).find(([folderName]) => {
+      return (
+        normalizedName === folderName ||
+        normalizedPath.includes(`/${folderName}`) ||
+        normalizedPath.includes(`\\${folderName}`)
+      );
+    });
+
+    const Icon = folderIcon
+      ? isOpen
+        ? folderIcon[1].open
+        : folderIcon[1].closed
+      : isOpen
+        ? FolderOpenIcon
+        : FolderIcon;
+
     return <SafeIcon src={Icon} className='w-4 h-4 shrink-0' />;
   }
 

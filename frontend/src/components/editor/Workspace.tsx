@@ -37,6 +37,18 @@ import ExeIcon from "../../assets/icons/exe.svg";
 import FileIcon_ from "../../assets/icons/file.svg";
 import FolderIcon from "../../assets/icons/folder.svg";
 import FolderOpenIcon from "../../assets/icons/folder-open.svg";
+import GitFolderIcon from "../../assets/icons/folder-git.svg";
+import GitFolderOpenIcon from "../../assets/icons/folder-git-open.svg";
+import GitHubFolderIcon from "../../assets/icons/folder-github.svg";
+import GitHubFolderOpenIcon from "../../assets/icons/folder-github-open.svg";
+import SrcFolderIcon from "../../assets/icons/folder-src.svg";
+import SrcFolderOpenIcon from "../../assets/icons/folder-src-open.svg";
+import PublicFolderIcon from "../../assets/icons/folder-public.svg";
+import PublicFolderOpenIcon from "../../assets/icons/folder-public-open.svg";
+import NodeModulesFolderIcon from "../../assets/icons/folder-node.svg";
+import NodeModulesFolderOpenIcon from "../../assets/icons/folder-node-open.svg";
+import DistFolderIcon from "../../assets/icons/folder-dist.svg";
+import DistFolderOpenIcon from "../../assets/icons/folder-dist-open.svg";
 
 /* -----------------------------
    FILE ICON MAP
@@ -60,6 +72,41 @@ const fileIconMap = {
   txt: FileIcon_,
   exe: ExeIcon,
 } as const;
+
+const folderIconMap: Record<string, { closed: string; open: string }> = {
+  ".git": { closed: GitFolderIcon, open: GitFolderOpenIcon },
+  git: { closed: GitFolderIcon, open: GitFolderOpenIcon },
+  ".github": { closed: GitHubFolderIcon, open: GitHubFolderOpenIcon },
+  github: { closed: GitHubFolderIcon, open: GitHubFolderOpenIcon },
+  src: { closed: SrcFolderIcon, open: SrcFolderOpenIcon },
+  public: { closed: PublicFolderIcon, open: PublicFolderOpenIcon },
+  node_modules: {
+    closed: NodeModulesFolderIcon,
+    open: NodeModulesFolderOpenIcon,
+  },
+  dist: { closed: DistFolderIcon, open: DistFolderOpenIcon },
+};
+
+function getFolderIcon(item: FileItem, isOpen: boolean) {
+  const normalizedName = item.name.toLowerCase();
+  const normalizedPath = item.path.toLowerCase();
+
+  const match = Object.entries(folderIconMap).find(([folderName]) => {
+    const normalizedFolderName = folderName.toLowerCase();
+    return (
+      normalizedName === normalizedFolderName ||
+      normalizedPath.includes(`/${normalizedFolderName}`) ||
+      normalizedPath.includes(`\\${normalizedFolderName}`) ||
+      normalizedPath.split(/[\\/]/).includes(normalizedFolderName)
+    );
+  });
+
+  if (!match) {
+    return isOpen ? FolderOpenIcon : FolderIcon;
+  }
+
+  return isOpen ? match[1].open : match[1].closed;
+}
 
 /* -----------------------------
    SAFE ICON RENDERER
@@ -92,7 +139,7 @@ function FileIconComponent({
   isOpen: boolean;
 }) {
   if (item.isDir) {
-    const Icon = isOpen ? FolderOpenIcon : FolderIcon;
+    const Icon = getFolderIcon(item, isOpen);
     return <SafeIcon src={Icon} className='w-4 h-4 shrink-0' />;
   }
 
