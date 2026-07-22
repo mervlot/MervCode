@@ -1,12 +1,12 @@
+import * as monaco from "monaco-editor";
+
 import type { MonacoLanguage } from "../types";
+import { openLSPDocument } from "../lsp";
 
 export const go: MonacoLanguage = {
   id: "go",
 
-  setup() {
-    // later:
-    // formatter
-    // gopls
-    // diagnostics
+  lsp(editor, _model) {
+    return openLSPDocument(editor);
   },
 };

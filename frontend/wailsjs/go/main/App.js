@@ -34,6 +34,34 @@ export function InspectAndReadFile(arg1) {
   return window['go']['main']['App']['InspectAndReadFile'](arg1);
 }
 
+export function LSPChangeFile(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['LSPChangeFile'](arg1, arg2, arg3, arg4);
+}
+
+export function LSPCloseFile(arg1, arg2) {
+  return window['go']['main']['App']['LSPCloseFile'](arg1, arg2);
+}
+
+export function LSPCompletion(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['LSPCompletion'](arg1, arg2, arg3, arg4);
+}
+
+export function LSPDefinition(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['LSPDefinition'](arg1, arg2, arg3, arg4);
+}
+
+export function LSPHover(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['LSPHover'](arg1, arg2, arg3, arg4);
+}
+
+export function LSPOpenFile(arg1, arg2, arg3) {
+  return window['go']['main']['App']['LSPOpenFile'](arg1, arg2, arg3);
+}
+
+export function LSPReferences(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['LSPReferences'](arg1, arg2, arg3, arg4);
+}
+
 export function Quit() {
   return window['go']['main']['App']['Quit']();
 }

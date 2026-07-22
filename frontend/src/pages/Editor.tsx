@@ -33,6 +33,7 @@ export default function Editor({
   const modelRef = useRef<monaco.editor.ITextModel | null>(null);
   const onSaveRef = useRef(onSave);
   const onChangeRef = useRef(onChange);
+  const lspCleanupRef = useRef<(() => void) | null>(null);
   const { theme } = useTheme();
 
   useEffect(() => {
@@ -99,7 +100,9 @@ export default function Editor({
         editor.addAction(descriptor);
       });
 
-      applyLanguageFeatures(langKey, editor, model);
+      lspCleanupRef.current?.();
+      lspCleanupRef.current =
+        applyLanguageFeatures(langKey, editor, model) ?? null;
 
       editor.onDidChangeCursorPosition((e) => {
         onCursorChange?.({
@@ -122,6 +125,8 @@ export default function Editor({
       onReady?.(editor);
 
       return () => {
+        lspCleanupRef.current?.();
+        lspCleanupRef.current = null;
         changeSub.dispose();
         editor.dispose();
         const existingModel = monaco.editor.getModel(uri);
@@ -146,13 +151,14 @@ export default function Editor({
 
   useEffect(() => {
     const model = modelRef.current;
-    if (!model) return;
+    const editor = editorRef.current;
+    if (!model || !editor) return;
 
     monaco.editor.setModelLanguage(model, langKey);
 
-    if (editorRef.current) {
-      applyLanguageFeatures(langKey, editorRef.current, model);
-    }
+    lspCleanupRef.current?.();
+    lspCleanupRef.current =
+      applyLanguageFeatures(langKey, editor, model) ?? null;
   }, [langKey]);
 
   useEffect(() => {

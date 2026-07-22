@@ -28,16 +28,19 @@ type App struct {
 	watcherCancel context.CancelFunc
 	watcherMu     sync.Mutex
 	currentRoot   string
+
+	lspMu      sync.Mutex
+	lspClients map[string]*lspClient
 }
 
 func NewApp() *App {
-	return &App{}
+	return &App{
+		lspClients: make(map[string]*lspClient),
+	}
 }
 
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
-	_ = exec.Command("typescript-language-server", "--stdio").Start()
-	_ = exec.Command("biome", "lsp-proxy").Start()
 }
 
 // StartWatcher sets up a recursive file watcher on the targeted workspace path
@@ -518,4 +521,36 @@ func (a *App) GitStatus(rootPath string) (*types.GitStatusResult, error) {
 	}
 
 	return result, nil
+}
+
+// ============================================================
+// LSP — Language Server Protocol proxy
+// ============================================================
+
+func (a *App) LSPOpenFile(lang, path, content string) error {
+	return a.lspOpenFile(lang, path, content)
+}
+
+func (a *App) LSPChangeFile(lang, path, content string, version int) error {
+	return a.lspChangeFile(lang, path, content, version)
+}
+
+func (a *App) LSPCloseFile(lang, path string) error {
+	return a.lspCloseFile(lang, path)
+}
+
+func (a *App) LSPHover(lang, path string, line, col int) (*types.LSPHoverResult, error) {
+	return a.lspHover(lang, path, line, col)
+}
+
+func (a *App) LSPCompletion(lang, path string, line, col int) ([]types.LSPCompletionItem, error) {
+	return a.lspCompletion(lang, path, line, col)
+}
+
+func (a *App) LSPDefinition(lang, path string, line, col int) (*types.LSPLocation, error) {
+	return a.lspDefinition(lang, path, line, col)
+}
+
+func (a *App) LSPReferences(lang, path string, line, col int) ([]types.LSPLocation, error) {
+	return a.lspReferences(lang, path, line, col)
 }

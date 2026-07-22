@@ -16,8 +16,8 @@ type Diagnostic struct {
 	Severity  string `json:"severity"`
 }
 type FileResponse struct {
-	Category string `json:"category"` // "editor", "image", "video", "audio", "pdf", "spreadsheet", "binary"
-	Content  string `json:"content"`  // Text content OR a fully qualified Base64 Data URL for media canvases
+	Category string `json:"category"`
+	Content  string `json:"content"`
 }
 type SearchMatch struct {
 	Path    string `json:"path"`
@@ -26,13 +26,54 @@ type SearchMatch struct {
 	Preview string `json:"preview"`
 }
 type GitFileStatus struct {
-	Path   string `json:"path"`   // absolute path
-	Rel    string `json:"rel"`    // path relative to repo root, as reported by git
-	Status string `json:"status"` // "M", "A", "D", "R", "??", etc (porcelain code)
+	Path   string `json:"path"`
+	Rel    string `json:"rel"`
+	Status string `json:"status"`
 }
 
 type GitStatusResult struct {
 	IsRepo bool            `json:"isRepo"`
 	Branch string          `json:"branch"`
 	Files  []GitFileStatus `json:"files"`
+}
+
+// LSP types
+type LSPPosition struct {
+	Line      int `json:"line"`
+	Character int `json:"character"`
+}
+
+type LSPRange struct {
+	Start LSPPosition `json:"start"`
+	End   LSPPosition `json:"end"`
+}
+
+type LSPHoverResult struct {
+	Contents interface{} `json:"contents"`
+	Range    *LSPRange   `json:"range,omitempty"`
+}
+
+type LSPCompletionItem struct {
+	Label         string `json:"label"`
+	Kind          int    `json:"kind"`
+	Detail        string `json:"detail,omitempty"`
+	Documentation string `json:"documentation,omitempty"`
+	InsertText    string `json:"insertText,omitempty"`
+}
+
+type LSPLocation struct {
+	URI   string   `json:"uri"`
+	Range LSPRange `json:"range"`
+}
+
+type LSPDiagnostic struct {
+	Range    LSPRange `json:"range"`
+	Message  string   `json:"message"`
+	Severity int      `json:"severity,omitempty"`
+	Source   string   `json:"source,omitempty"`
+}
+
+type LSPPublishDiagnosticsParams struct {
+	URI         string          `json:"uri"`
+	Diagnostics []LSPDiagnostic `json:"diagnostics"`
 }

@@ -14,7 +14,6 @@ var assets embed.FS
 func main() {
 	// Create an instance of the app structure
 	app := NewApp()
-
 	// Create application with options
 	err := wails.Run(&options.App{
 		Title: "merv-code",
@@ -40,7 +39,7 @@ func main() {
 		// Safely tears down file system watchers on application exit
 		OnShutdown: func(ctx context.Context) {
 			app.StopWatcher()
-		},
+		},    
 
 		Bind: []interface{}{
 			app,

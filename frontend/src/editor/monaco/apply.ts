@@ -5,19 +5,27 @@ export function applyLanguageFeatures(
   language: string,
   editor: monaco.editor.IStandaloneCodeEditor,
   model: monaco.editor.ITextModel,
-) {
+): (() => void) | void {
   const lang = registry[language];
 
   if (!lang) return;
 
   lang.setup?.();
   lang.diagnostics?.(model);
-  lang.lsp?.(editor);
+
+  const lspCleanup = lang.lsp?.(editor, model);
 
   if (lang.formatter) {
-    monaco.languages.registerDocumentFormattingEditProvider(language, {
-      provideDocumentFormattingEdits: (model) => lang.formatter!(model),
-    });
+    const formatterDisposable =
+      monaco.languages.registerDocumentFormattingEditProvider(language, {
+        provideDocumentFormattingEdits: (model) => lang.formatter!(model),
+      });
+    const origCleanup = lspCleanup;
+    return () => {
+      origCleanup?.();
+      formatterDisposable.dispose();
+    };
   }
-  console.log("Applied language:", language);
+
+  return lspCleanup;
 }

@@ -18,6 +18,20 @@ export function Greet(arg1:string):Promise<string>;
 
 export function InspectAndReadFile(arg1:string):Promise<types.FileResponse>;
 
+export function LSPChangeFile(arg1:string,arg2:string,arg3:string,arg4:number):Promise<void>;
+
+export function LSPCloseFile(arg1:string,arg2:string):Promise<void>;
+
+export function LSPCompletion(arg1:string,arg2:string,arg3:number,arg4:number):Promise<Array<types.LSPCompletionItem>>;
+
+export function LSPDefinition(arg1:string,arg2:string,arg3:number,arg4:number):Promise<types.LSPLocation>;
+
+export function LSPHover(arg1:string,arg2:string,arg3:number,arg4:number):Promise<types.LSPHoverResult>;
+
+export function LSPOpenFile(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function LSPReferences(arg1:string,arg2:string,arg3:number,arg4:number):Promise<Array<types.LSPLocation>>;
+
 export function Quit():Promise<void>;
 
 export function ReadDir(arg1:string):Promise<Array<types.FileItem>>;

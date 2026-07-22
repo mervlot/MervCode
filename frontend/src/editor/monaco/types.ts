@@ -11,5 +11,8 @@ export interface MonacoLanguage {
 
   diagnostics?(model: monaco.editor.ITextModel): void;
 
-  lsp?(editor: monaco.editor.IStandaloneCodeEditor): void;
+  lsp?(
+    editor: monaco.editor.IStandaloneCodeEditor,
+    model: monaco.editor.ITextModel,
+  ): (() => void) | void;
 }

@@ -25,7 +25,10 @@ self.MonacoEnvironment = {
     if (label === "html" || label === "handlebars" || label === "razor") {
       return new htmlWorker();
     }
-    if (label === "typescript" || label === "javascript") {
+    if (
+      label === "typescript" || label === "typescriptreact" ||
+      label === "javascript" || label === "javascriptreact"
+    ) {
       return new tsWorker();
     }
     return new editorWorker();
