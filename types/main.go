@@ -53,12 +53,26 @@ type LSPHoverResult struct {
 	Range    *LSPRange   `json:"range,omitempty"`
 }
 
+type LSPTextEdit struct {
+	Range   LSPRange `json:"range"`
+	NewText string   `json:"newText"`
+}
+
 type LSPCompletionItem struct {
-	Label         string `json:"label"`
-	Kind          int    `json:"kind"`
-	Detail        string `json:"detail,omitempty"`
-	Documentation string `json:"documentation,omitempty"`
-	InsertText    string `json:"insertText,omitempty"`
+	Label               string        `json:"label"`
+	Kind                int           `json:"kind,omitempty"`
+	Detail              string        `json:"detail,omitempty"`
+	Documentation       string        `json:"documentation,omitempty"`
+	InsertText          string        `json:"insertText,omitempty"`
+	InsertTextFormat    int           `json:"insertTextFormat,omitempty"`
+	TextEdit            *LSPTextEdit  `json:"textEdit,omitempty"`
+	SortText            string        `json:"sortText,omitempty"`
+	FilterText          string        `json:"filterText,omitempty"`
+	CommitCharacters    []string      `json:"commitCharacters,omitempty"`
+	Preselect           bool          `json:"preselect,omitempty"`
+	Tags                []int         `json:"tags,omitempty"`
+	AdditionalTextEdits []LSPTextEdit `json:"additionalTextEdits,omitempty"`
+	Data                interface{}   `json:"data,omitempty"`
 }
 
 type LSPLocation struct {
@@ -66,11 +80,19 @@ type LSPLocation struct {
 	Range LSPRange `json:"range"`
 }
 
+type LSPDiagnosticRelatedInformation struct {
+	Location LSPLocation `json:"location"`
+	Message  string      `json:"message"`
+}
+
 type LSPDiagnostic struct {
-	Range    LSPRange `json:"range"`
-	Message  string   `json:"message"`
-	Severity int      `json:"severity,omitempty"`
-	Source   string   `json:"source,omitempty"`
+	Range              LSPRange                       `json:"range"`
+	Message            string                         `json:"message"`
+	Severity           int                            `json:"severity,omitempty"`
+	Source             string                         `json:"source,omitempty"`
+	Code               interface{}                    `json:"code,omitempty"`
+	Tags               []int                          `json:"tags,omitempty"`
+	RelatedInformation []LSPDiagnosticRelatedInformation `json:"relatedInformation,omitempty"`
 }
 
 type LSPPublishDiagnosticsParams struct {

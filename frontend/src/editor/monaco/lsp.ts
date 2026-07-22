@@ -10,10 +10,22 @@ import {
 } from "../../../wailsjs/go/main/App";
 
 const enabled = new Set<string>();
-let docVersion = 1;
 
 function uriPath(uri: monaco.Uri): string {
-  return uri.path || uri.toString();
+  const p = uri.fsPath || uri.path || uri.toString();
+  // Normalize backslashes to forward slashes for cross-platform matching
+  return p.replace(/\\/g, "/");
+}
+
+function modelToRange(
+  range: { start: { line: number; character: number }; end: { line: number; character: number } },
+): monaco.IRange {
+  return {
+    startLineNumber: range.start.line + 1,
+    startColumn: range.start.character + 1,
+    endLineNumber: range.end.line + 1,
+    endColumn: range.end.character + 1,
+  };
 }
 
 function ensureEnabled(lang: string) {
@@ -61,12 +73,7 @@ function ensureEnabled(lang: string) {
         if (result.range) {
           return {
             contents: markdown,
-            range: new monaco.Range(
-              result.range.start.line + 1,
-              result.range.start.character + 1,
-              result.range.end.line + 1,
-              result.range.end.character + 1,
-            ),
+            range: modelToRange(result.range),
           };
         }
 
@@ -91,10 +98,7 @@ function ensureEnabled(lang: string) {
 
         const suggestions: monaco.languages.CompletionItem[] = items.map(
           (item) => {
-            const kindMap: Record<
-              number,
-              monaco.languages.CompletionItemKind
-            > = {
+            const kindMap: Record<number, monaco.languages.CompletionItemKind> = {
               1: monaco.languages.CompletionItemKind.Text,
               2: monaco.languages.CompletionItemKind.Method,
               3: monaco.languages.CompletionItemKind.Function,
@@ -121,21 +125,31 @@ function ensureEnabled(lang: string) {
               24: monaco.languages.CompletionItemKind.Operator,
               25: monaco.languages.CompletionItemKind.TypeParameter,
             };
-            return {
+            const range = item.textEdit?.range
+              ? modelToRange(item.textEdit.range)
+              : {
+                  startLineNumber: position.lineNumber,
+                  startColumn: position.column,
+                  endLineNumber: position.lineNumber,
+                  endColumn: position.column,
+                };
+            const base: monaco.languages.CompletionItem = {
               label: item.label,
-              kind:
-                kindMap[item.kind] ??
-                monaco.languages.CompletionItemKind.Text,
+              kind: kindMap[item.kind ?? 0] ?? monaco.languages.CompletionItemKind.Text,
               detail: item.detail ?? "",
               documentation: item.documentation ?? "",
-              insertText: item.insertText || item.label,
-              range: {
-                startLineNumber: position.lineNumber,
-                startColumn: 1,
-                endLineNumber: position.lineNumber,
-                endColumn: position.column,
-              },
+              insertText: item.textEdit?.newText ?? item.insertText ?? item.label,
+              range,
             };
+            if (item.insertTextFormat === 2) {
+              base.insertTextRules = monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet;
+            }
+            if (item.filterText != null) base.filterText = item.filterText;
+            if (item.sortText != null) base.sortText = item.sortText;
+            if (item.preselect != null) base.preselect = item.preselect;
+            if (item.commitCharacters != null) base.commitCharacters = item.commitCharacters;
+            if (item.tags?.includes(1)) base.tags = [1 as monaco.languages.CompletionItemTag];
+            return base;
           },
         );
 
@@ -160,12 +174,7 @@ function ensureEnabled(lang: string) {
         const uri = monaco.Uri.parse(result.uri);
         return {
           uri,
-          range: new monaco.Range(
-            result.range.start.line + 1,
-            result.range.start.character + 1,
-            result.range.end.line + 1,
-            result.range.end.character + 1,
-          ),
+          range: modelToRange(result.range),
         };
       } catch {
         return null;
@@ -180,6 +189,7 @@ export function openLSPDocument(editor: monaco.editor.IStandaloneCodeEditor) {
 
   const lang = model.getLanguageId();
   const path = uriPath(model.uri);
+  let docVersion = 1;
 
   ensureEnabled(lang);
 
@@ -194,9 +204,9 @@ export function openLSPDocument(editor: monaco.editor.IStandaloneCodeEditor) {
 
   const diagListener = EventsOn(
     "lsp:diagnostics",
-    (data: { uri: string; language: string; diagnostics: any[] }) => {
+    (data: { uri: string; path: string; language: string; diagnostics: any[] }) => {
       if (data.language !== lang) return;
-      if (data.uri !== path) return;
+      if (data.path !== path) return;
 
       const markers: monaco.editor.IMarkerData[] =
         data.diagnostics?.map((d: any) => {
@@ -206,15 +216,28 @@ export function openLSPDocument(editor: monaco.editor.IStandaloneCodeEditor) {
             3: monaco.MarkerSeverity.Info,
             4: monaco.MarkerSeverity.Hint,
           };
-          return {
-            severity:
-              severityMap[d.severity] ?? monaco.MarkerSeverity.Error,
+          const marker: monaco.editor.IMarkerData = {
+            severity: severityMap[d.severity] ?? monaco.MarkerSeverity.Error,
             message: d.message,
-            startLineNumber: d.range.start.line + 1,
-            startColumn: d.range.start.character + 1,
-            endLineNumber: d.range.end.line + 1,
-            endColumn: d.range.end.character + 1,
+            ...modelToRange(d.range),
+            ...(typeof d.source === "string" ? { source: d.source } : {}),
+            ...(d.code != null ? { code: d.code } : {}),
+            ...(d.relatedInformation?.length ? {
+              relatedInformation: d.relatedInformation.map(
+                (ri: any) => ({
+                  resource: monaco.Uri.parse(ri.location.uri),
+                  message: ri.message,
+                  ...modelToRange(ri.location.range),
+                }),
+              ),
+            } : {}),
           };
+          if (d.tags?.includes(1)) {
+            marker.tags = [monaco.MarkerTag.Deprecated];
+          } else if (d.tags?.includes(2)) {
+            marker.tags = [monaco.MarkerTag.Unnecessary];
+          }
+          return marker;
         }) ?? [];
 
       monaco.editor.setModelMarkers(model, "lsp", markers);

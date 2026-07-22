@@ -48,8 +48,11 @@ func (a *App) StartWatcher(rootPath string) error {
 	a.watcherMu.Lock()
 	defer a.watcherMu.Unlock()
 
-	// Stop any existing workspace watchers first
+	// Stop any existing watchers first
 	a.stopWatcherInternal()
+
+	// Shut down LSP clients from the previous workspace
+	a.closeAllLSPClients()
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {

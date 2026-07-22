@@ -100,26 +100,6 @@ export namespace types {
 		    return a;
 		}
 	}
-	export class LSPCompletionItem {
-	    label: string;
-	    kind: number;
-	    detail?: string;
-	    documentation?: string;
-	    insertText?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new LSPCompletionItem(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.label = source["label"];
-	        this.kind = source["kind"];
-	        this.detail = source["detail"];
-	        this.documentation = source["documentation"];
-	        this.insertText = source["insertText"];
-	    }
-	}
 	export class LSPPosition {
 	    line: number;
 	    character: number;
@@ -146,6 +126,94 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.start = this.convertValues(source["start"], LSPPosition);
 	        this.end = this.convertValues(source["end"], LSPPosition);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class LSPTextEdit {
+	    range: LSPRange;
+	    newText: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LSPTextEdit(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.range = this.convertValues(source["range"], LSPRange);
+	        this.newText = source["newText"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class LSPCompletionItem {
+	    label: string;
+	    kind?: number;
+	    detail?: string;
+	    documentation?: string;
+	    insertText?: string;
+	    insertTextFormat?: number;
+	    textEdit?: LSPTextEdit;
+	    sortText?: string;
+	    filterText?: string;
+	    commitCharacters?: string[];
+	    preselect?: boolean;
+	    tags?: number[];
+	    additionalTextEdits?: LSPTextEdit[];
+	    data?: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new LSPCompletionItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.label = source["label"];
+	        this.kind = source["kind"];
+	        this.detail = source["detail"];
+	        this.documentation = source["documentation"];
+	        this.insertText = source["insertText"];
+	        this.insertTextFormat = source["insertTextFormat"];
+	        this.textEdit = this.convertValues(source["textEdit"], LSPTextEdit);
+	        this.sortText = source["sortText"];
+	        this.filterText = source["filterText"];
+	        this.commitCharacters = source["commitCharacters"];
+	        this.preselect = source["preselect"];
+	        this.tags = source["tags"];
+	        this.additionalTextEdits = this.convertValues(source["additionalTextEdits"], LSPTextEdit);
+	        this.data = source["data"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -230,6 +298,7 @@ export namespace types {
 		    return a;
 		}
 	}
+	
 	
 	
 	export class SearchMatch {
