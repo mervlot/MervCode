@@ -1,4 +1,172 @@
 @import "tailwindcss";
+@font-face {
+  font-family: "Monaspace";
+  src: url("./assets/fonts/Variable Web Fonts/Monaspace Krypton/Monaspace Krypton Var.woff2")
+    format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+}
+
+/* ============================================================
+   THEME TOKENS
+   ============================================================ */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-app: #000000;
+  --bg-canvas: #0d0d0d;
+  --bg-panel: #0a0a0a;
+  --bg-panel-alt: #0a0a0a;
+  --bg-surface: #141414;
+  --bg-surface-2: #1a1a1a;
+  --bg-chip: #1a1a1a;
+  --bg-tab: #0a0a0a;
+  --bg-tab-active: #111111;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.08);
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --border-focus: rgba(220, 20, 60, 0.4);
+
+  --text-primary: rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.6);
+  --text-tertiary: rgba(255, 255, 255, 0.38);
+  --text-faint: rgba(255, 255, 255, 0.2);
+
+  --accent: #DC143C;
+  --accent-strong: #E8173D;
+  --accent-soft: rgba(220, 20, 60, 0.12);
+  --accent-soft-strong: rgba(220, 20, 60, 0.2);
+  --accent-border: rgba(220, 20, 60, 0.25);
+
+  --danger: #DC143C;
+  --danger-soft: rgba(220, 20, 60, 0.12);
+  --success: #22c55e;
+  --success-soft: rgba(34, 197, 94, 0.12);
+  --warning: #eab308;
+
+  --scrollbar-track: #0a0a0a;
+  --scrollbar-thumb: #2a2a2a;
+  --scrollbar-thumb-hover: #3a3a3a;
+
+  --shadow-color: rgba(0, 0, 0, 0.6);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-app: #f5f5f5;
+  --bg-canvas: #ffffff;
+  --bg-panel: #f0f0f0;
+  --bg-panel-alt: #f0f0f0;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #f5f5f5;
+  --bg-chip: #e8e8e8;
+  --bg-tab: #f0f0f0;
+  --bg-tab-active: #ffffff;
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --bg-active: rgba(0, 0, 0, 0.08);
+
+  --border: rgba(0, 0, 0, 0.1);
+  --border-strong: rgba(0, 0, 0, 0.16);
+  --border-focus: rgba(220, 20, 60, 0.35);
+
+  --text-primary: rgba(15, 15, 25, 0.9);
+  --text-secondary: rgba(15, 15, 25, 0.6);
+  --text-tertiary: rgba(15, 15, 25, 0.4);
+  --text-faint: rgba(15, 15, 25, 0.22);
+
+  --accent: #B91030;
+  --accent-strong: #DC143C;
+  --accent-soft: rgba(185, 16, 48, 0.1);
+  --accent-soft-strong: rgba(185, 16, 48, 0.18);
+  --accent-border: rgba(185, 16, 48, 0.25);
+
+  --danger: #B91030;
+  --danger-soft: rgba(185, 16, 48, 0.1);
+  --success: #16a34a;
+  --success-soft: rgba(22, 163, 74, 0.1);
+  --warning: #ca8a04;
+
+  --scrollbar-track: #e8e8e8;
+  --scrollbar-thumb: #c0c0c0;
+  --scrollbar-thumb-hover: #a0a0a0;
+
+  --shadow-color: rgba(0, 0, 0, 0.1);
+}
+
+.bg-app-surface {
+  background-color: var(--bg-app);
+}
+.bg-canvas {
+  background-color: var(--bg-canvas);
+}
+.bg-panel {
+  background-color: var(--bg-panel);
+}
+.bg-panel-alt {
+  background-color: var(--bg-panel-alt);
+}
+.bg-surface {
+  background-color: var(--bg-surface);
+}
+.bg-surface-2 {
+  background-color: var(--bg-surface-2);
+}
+.bg-chip {
+  background-color: var(--bg-chip);
+}
+.bg-tab {
+  background-color: var(--bg-tab);
+}
+.bg-tab-active {
+  background-color: var(--bg-tab-active);
+}
+.hover-bg:hover {
+  background-color: var(--bg-hover);
+}
+.active-bg {
+  background-color: var(--bg-active);
+}
+
+.border-subtle {
+  border-color: var(--border);
+}
+.border-subtle-strong {
+  border-color: var(--border-strong);
+}
+
+.text-primary {
+  color: var(--text-primary);
+}
+.text-secondary {
+  color: var(--text-secondary);
+}
+.text-tertiary {
+  color: var(--text-tertiary);
+}
+.text-faint {
+  color: var(--text-faint);
+}
+.text-accent {
+  color: var(--accent);
+}
+
+.bg-accent-soft {
+  background-color: var(--accent-soft);
+}
+.bg-accent-soft-strong {
+  background-color: var(--accent-soft-strong);
+}
+.border-accent {
+  border-color: var(--accent-border);
+}
+
+.shadow-app {
+  box-shadow: 0 8px 24px var(--shadow-color);
+}
 
 html,
 body,
@@ -7,41 +175,57 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
 }
 
-/* Default arrow */
+body {
+  transition: background-color 0.15s ease;
+}
+
+.monaco-editor,
+.monaco-editor * {
+  font-family: "Monaspace" !important;
+  font-feature-settings:
+    "calt", "liga", "ss01", "ss02", "ss03", "ss04", "ss05", "ss06", "ss07",
+    "ss08", "ss09";
+}
+
 body {
   cursor: url("./assets/cursor/pointer.cur"), default;
 }
 
-/* Text editing */
-input,
+input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not(
+    [type="button"]
+  ):not([type="submit"]):not([type="color"]),
 textarea,
 [contenteditable="true"] {
-  cursor: url("./assets/cursor/text.cur"), text;
+  cursor: text;
 }
 
-/* CodeMirror text editing should use the standard text caret */
+input[type="range"],
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: url("./assets/cursor/pointer.cur"), pointer;
+}
+
 .cm-editor,
 .cm-editor .cm-content,
 .cm-editor .cm-gutters {
   cursor: text !important;
 }
 
-/* Links */
 a,
 button,
 [role="button"] {
   cursor: url("./assets/cursor/link.cur"), pointer;
 }
 
-/* Disabled */
 :disabled,
 [aria-disabled="true"] {
   cursor: url("./assets/cursor/unavailable.cur"), not-allowed;
 }
 
-/* Dragging */
 .draggable {
   --wails-draggable: drag;
   cursor: url("./assets/cursor/move.cur"), move;
@@ -51,7 +235,6 @@ button,
   --wails-draggable: no-drag;
 }
 
-/* Resize cursors */
 .resize-horizontal {
   cursor: url("./assets/cursor/horz.cur"), ew-resize;
 }
@@ -68,29 +251,38 @@ button,
   cursor: url("./assets/cursor/dgn2.cur"), nesw-resize;
 }
 
-/* Chrome / Edge / Safari */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f0f0f;
+  background: var(--scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3a3a3a;
-  border-radius: 10px;
-  border: 2px solid #0f0f0f;
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #5a5a5a;
+  background: var(--scrollbar-thumb-hover);
 }
 
-/* Firefox */
 * {
   box-sizing: border-box;
   scrollbar-width: thin;
-  scrollbar-color: #3a3a3a #0f0f0f;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-overlay-in {
+  animation: overlay-in 0.1s ease-out;
 }

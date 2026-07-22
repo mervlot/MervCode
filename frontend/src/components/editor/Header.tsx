@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Quit } from "../../../wailsjs/go/main/App";
+import CommandPalette, { type Command } from "./CommandPalette";
+import { useTheme } from "../../contexts/ThemeContext";
+import type { FileTab } from "../../types";
 
 declare global {
   interface Window {
@@ -12,116 +15,255 @@ declare global {
   }
 }
 
-export default function Header({ recent }: { recent: string }) {
+interface HeaderProps {
+  recent: string;
+  hasUnsavedChanges?: boolean;
+  onRequestQuit?: () => void;
+  terminalOpen: boolean;
+  setTerminalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
+  saveActiveFile: () => Promise<void>;
+  activePath: string | null;
+  closeTab: (path: string) => void;
+  setActiveTab: React.Dispatch<React.SetStateAction<string>>;
+  closeAllTabs: () => void;
+  setActivePath: React.Dispatch<React.SetStateAction<string | null>>;
+  tabs: FileTab[];
+  paletteOpen: boolean;
+  setPaletteOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+export default function Header({
+  recent,
+  hasUnsavedChanges,
+  onRequestQuit,
+  terminalOpen,
+  setTerminalOpen,
+  sidebarCollapsed,
+  setSidebarCollapsed,
+  saveActiveFile,
+  activePath,
+  closeTab,
+  setActiveTab,
+  closeAllTabs,
+  setActivePath,
+  tabs,
+  paletteOpen,
+  setPaletteOpen,
+}: HeaderProps) {
+  const { theme, toggleTheme } = useTheme();
   const [isMaximized, setIsMaximized] = useState(false);
 
-  const handleMinimise = () => {
-    try {
-      window.runtime?.WindowMinimise?.();
-    } catch (err) {
-      console.error("Failed to minimize window:", err);
-    }
-  };
+  useEffect(() => {
+    window.runtime?.WindowIsMaximised?.().then((v) => {
+      setIsMaximized(!!v);
+    });
+  }, []);
 
-  const handleToggleMaximize = async () => {
-    try {
-      const maximized = await window.runtime?.WindowIsMaximised?.();
-      if (maximized) {
-        window.runtime?.WindowUnmaximise?.();
-        setIsMaximized(false);
-      } else {
-        window.runtime?.WindowMaximise?.();
-        setIsMaximized(true);
-      }
-    } catch (err) {
-      console.error("Failed to toggle maximize state:", err);
+  const commands: Command[] = useMemo(() => {
+    const list: Command[] = [
+      {
+        id: "toggle-terminal",
+        label: terminalOpen ? "Close Terminal" : "Open Terminal",
+        category: "View",
+        shortcut: "Ctrl `",
+        icon: "terminal",
+        run: () => setTerminalOpen((v) => !v),
+      },
+      {
+        id: "toggle-sidebar",
+        label: sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
+        category: "View",
+        shortcut: "Ctrl B",
+        icon: "layout-sidebar",
+        run: () => setSidebarCollapsed((v) => !v),
+      },
+      {
+        id: "toggle-theme",
+        label: theme === "dark" ? "Switch to Light" : "Switch to Dark",
+        category: "Appearance",
+        icon: "circle-half",
+        run: toggleTheme,
+      },
+      {
+        id: "save-file",
+        label: "Save Active File",
+        category: "File",
+        shortcut: "Ctrl S",
+        icon: "floppy",
+        run: () => void saveActiveFile(),
+      },
+      {
+        id: "close-tab",
+        label: "Close Active Tab",
+        category: "File",
+        shortcut: "Ctrl W",
+        icon: "x-lg",
+        run: () => activePath && closeTab(activePath),
+      },
+      {
+        id: "close-all-tabs",
+        label: "Close All Tabs",
+        category: "File",
+        icon: "x-lg",
+        run: closeAllTabs,
+      },
+      {
+        id: "go-to-search",
+        label: "Search in Workspace",
+        category: "Navigate",
+        icon: "search",
+        run: () => {
+          setSidebarCollapsed(false);
+          setActiveTab("search");
+        },
+      },
+      {
+        id: "go-to-source-control",
+        label: "Source Control",
+        category: "Navigate",
+        icon: "git",
+        run: () => {
+          setSidebarCollapsed(false);
+          setActiveTab("source-control");
+        },
+      },
+      {
+        id: "open-settings",
+        label: "Settings",
+        category: "Navigate",
+        icon: "gear",
+        run: () => {
+          setSidebarCollapsed(false);
+          setActiveTab("settings");
+        },
+      },
+      {
+        id: "open-folder",
+        label: "Open Folder",
+        category: "File",
+        icon: "folder2-open",
+        run: () => {
+          setSidebarCollapsed(false);
+          setActiveTab("explorer");
+          window.dispatchEvent(new CustomEvent("mervcode:open-folder"));
+        },
+      },
+    ];
+
+    tabs.forEach((t: FileTab) => {
+      list.push({
+        id: `goto-${t.path}`,
+        label: t.name,
+        category: "Go to File",
+        icon: "file-earmark",
+        run: () => setActivePath(t.path),
+      });
+    });
+
+    return list;
+  }, [terminalOpen, sidebarCollapsed, theme, tabs, activePath]);
+
+  const minimize = () => window.runtime?.WindowMinimise?.();
+
+  const maximize = async () => {
+    const maximized = await window.runtime?.WindowIsMaximised?.();
+    if (maximized) {
+      window.runtime?.WindowUnmaximise?.();
+      setIsMaximized(false);
+    } else {
+      window.runtime?.WindowMaximise?.();
+      setIsMaximized(true);
     }
   };
 
   const handleClose = () => {
-    try {
-      Quit();
-    } catch (err) {
-      console.error("Failed to close window:", err);
-    }
+    if (onRequestQuit) onRequestQuit();
+    else Quit();
   };
 
   return (
-    <header className='draggable h-8 w-full bg-[#1a1a2e] border-b border-white/5 flex items-center justify-between px-3 select-none shrink-0'>
-      {/* LEFT — High-Fidelity macOS Traffic Lights */}
-      {/* LEFT — Micro-Interacted macOS Traffic Lights */}
-      <div className='no-drag flex items-center gap-2'>
-        {/* Close Button (Red) */}
-        <button
-          onClick={handleClose}
-          title='Close'
-          className='group w-3 h-3 rounded-full bg-[#ff5f56] active:bg-[#bf433e] border border-[#e0443e] flex items-center justify-center transition-all'
-        >
-          <svg
-            viewBox='0 0 12 12'
-            className='w-1.5 h-1.5 opacity-0 group-hover:opacity-65 stroke-[#4a0000] transition-opacity duration-150'
-            strokeWidth='1.2'
-            strokeLinecap='round'
-          >
-            <line x1='2.5' y1='2.5' x2='9.5' y2='9.5' />
-            <line x1='9.5' y1='2.5' x2='2.5' y2='9.5' />
-          </svg>
-        </button>
-
-        {/* Minimize Button (Yellow) */}
-        <button
-          onClick={handleMinimise}
-          title='Minimize'
-          className='group w-3 h-3 rounded-full bg-[#ffbd2e] active:bg-[#c28e22] border border-[#dfa224] flex items-center justify-center transition-all'
-        >
-          <svg
-            viewBox='0 0 12 12'
-            className='w-1.75 h-1.75 opacity-0 group-hover:opacity-70 stroke-[#5c3e00] transition-opacity duration-150'
-            strokeWidth='1.4'
-            strokeLinecap='round'
-          >
-            <line x1='2' y1='6' x2='10' y2='6' />
-          </svg>
-        </button>
-
-        {/* Maximize / Fullscreen Button (Green) */}
-        <button
-          onClick={handleToggleMaximize}
-          title={isMaximized ? "Restore" : "Maximize"}
-          className='group w-3 h-3 rounded-full bg-[#27c93f] active:bg-[#1a942b] border border-[#1cb133] flex items-center justify-center transition-all'
-        >
-          {isMaximized ? (
-            /* Collapse / Restore Icon */
-            <svg
-              viewBox='0 0 12 12'
-              className='w-1.5 h-1.5 opacity-0 group-hover:opacity-65 fill-[#004d0f] transition-opacity duration-150'
-            >
-              <path d='M10.5 4.5H7.5V1.5L9 3 l2-2L12 2l-2 2 1.5 1.5ZM1.5 7.5H4.5V10.5L3 9 l-2 2L0 10l2-2-1.5-1.5Z' />
-            </svg>
-          ) : (
-            /* Expand / Maximize Icon */
-            <svg
-              viewBox='0 0 12 12'
-              className='w-1.5 h-1.5 opacity-0 group-hover:opacity-65 fill-[#004d0f] transition-opacity duration-150'
-            >
-              <path d='M11 4V1H8L9.5 2.5l-3 3 1 1 3-3L11 4ZM1 8v3h3L2.5 9.5l3-3-1-1-3 3L1 8Z' />
-            </svg>
-          )}
-        </button>
-      </div>
-      {/* CENTER — File Tabs */}
-      <div className='no-drag flex-1 flex items-center h-full ml-2 overflow-x-auto scrollbar-none'>
+    <header className='h-9 w-full bg-panel border-b border-subtle flex items-center select-none shrink-0'>
+      <div className='draggable flex-1 h-full flex items-center px-3'>
         {recent && (
-          <div className='flex items-center gap-1.5 h-full px-3 bg-[#252540] border-t-2 border-t-purple-400 text-white/80 text-xs cursor-pointer min-w-0'>
-            <span className='truncate max-w-28'>{recent}</span>
+          <div className='no-drag px-3 h-7 flex items-center gap-1.5 rounded bg-surface border border-subtle text-[12px] text-secondary'>
+            {hasUnsavedChanges && (
+              <span className='h-1.5 w-1.5 rounded-full bg-accent shrink-0' />
+            )}
+            <span className='truncate'>{recent}</span>
           </div>
         )}
       </div>
-
-      {/* RIGHT — Actions */}
-      <div className='no-drag flex items-center gap-2 text-xs text-white/50'>
-        <button className='w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold hover:bg-indigo-500 transition-colors'>
-          J
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+      />
+      <div className='no-drag flex items-center h-full pr-1 gap-0.5'>
+        <button
+          onClick={minimize}
+          className='group w-8 h-8 rounded flex items-center justify-center hover:bg-hover transition-colors'
+        >
+          <svg
+            width='10'
+            height='10'
+            viewBox='0 0 12 12'
+            className='stroke-current text-tertiary group-hover:text-primary'
+            fill='none'
+            strokeWidth='1.5'
+            strokeLinecap='round'
+          >
+            <path d='M2 6H10' />
+          </svg>
+        </button>
+        <button
+          onClick={maximize}
+          className='group w-8 h-8 rounded flex items-center justify-center hover:bg-hover transition-colors'
+        >
+          {isMaximized ? (
+            <svg
+              width='10'
+              height='10'
+              viewBox='0 0 12 12'
+              fill='none'
+              stroke='currentColor'
+              className='text-tertiary group-hover:text-primary'
+              strokeWidth='1.3'
+            >
+              <rect x='2.5' y='4' width='5.5' height='5.5' />
+              <path d='M4 4V2.5H9.5V8H8' />
+            </svg>
+          ) : (
+            <svg
+              width='10'
+              height='10'
+              viewBox='0 0 12 12'
+              fill='none'
+              stroke='currentColor'
+              className='text-tertiary group-hover:text-primary'
+              strokeWidth='1.3'
+            >
+              <rect x='2' y='2' width='8' height='8' />
+            </svg>
+          )}
+        </button>
+        <button
+          onClick={handleClose}
+          className='group w-8 h-8 rounded flex items-center justify-center hover:bg-[#DC143C] transition-colors'
+        >
+          <svg
+            width='10'
+            height='10'
+            viewBox='0 0 12 12'
+            fill='none'
+            stroke='currentColor'
+            className='text-tertiary group-hover:text-white'
+            strokeWidth='1.5'
+            strokeLinecap='round'
+          >
+            <path d='M3 3L9 9M9 3L3 9' />
+          </svg>
         </button>
       </div>
     </header>

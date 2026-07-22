@@ -1,184 +1,9 @@
 import { useState } from "react";
 import { FolderDialog, ReadDir, ReadFile } from "../../wailsjs/go/main/App";
+import iconRegistry from "../vars/icon.json";
 
 /* -----------------------------
-   ICON IMPORTS
-   (these may be URLs OR components depending on bundler)
------------------------------- */
-import JSIcon from "../assets/icons/javascript.svg";
-import TSIcon from "../assets/icons/typescript.svg";
-import ReactIcon from "../assets/icons/react.svg";
-import JSONIcon from "../assets/icons/json.svg";
-import MarkdownIcon from "../assets/icons/markdown.svg";
-import HTMLIcon from "../assets/icons/html.svg";
-import CSSIcon from "../assets/icons/css.svg";
-import PythonIcon from "../assets/icons/python.svg";
-import GoIcon from "../assets/icons/go.svg";
-import RustIcon from "../assets/icons/rust.svg";
-import PHPIcon from "../assets/icons/php.svg";
-import ExeIcon from "../assets/icons/exe.svg";
-import FileIcon_ from "../assets/icons/file.svg";
-import FolderIcon from "../assets/icons/folder.svg";
-import FolderOpenIcon from "../assets/icons/folder-open.svg";
-import GitIcon from "../assets/icons/git.svg";
-import GitHubFolderIcon from "../assets/icons/folder-github.svg";
-import GitHubFolderOpenIcon from "../assets/icons/folder-github-open.svg";
-import GitLabIcon from "../assets/icons/gitlab.svg";
-import BitbucketIcon from "../assets/icons/bitbucket.svg";
-import GitPodIcon from "../assets/icons/gitpod.svg";
-import ImageIcon from "../assets/icons/image.svg";
-import DiskImageIcon from "../assets/icons/disk-image.svg";
-/* -----------------------------
-   FILE ICON MAP
------------------------------- */
-type IconSource =
-  | string
-  | ((props: { className?: string | undefined }) => JSX.Element);
-
-const fileIconMap: Record<string, IconSource> = {
-  js: JSIcon,
-  jsx: ReactIcon,
-  ts: TSIcon,
-  tsx: ReactIcon,
-  json: JSONIcon,
-  md: MarkdownIcon,
-  html: HTMLIcon,
-  css: CSSIcon,
-  py: PythonIcon,
-  go: GoIcon,
-  rs: RustIcon,
-  php: PHPIcon,
-  png: ImageIcon,
-  jpg: ImageIcon,
-  svg: ImageIcon,
-  txt: FileIcon_,
-  exe: ExeIcon,
-  gitignore: GitIcon,
-};
-
-type FolderIconDefinition = {
-  closed: IconSource;
-  open: IconSource;
-};
-
-const folderIconMap: Record<string, FolderIconDefinition> = {
-  ".git": { closed: GitIcon, open: GitIcon },
-  git: { closed: GitIcon, open: GitIcon },
-  ".github": { closed: GitHubFolderIcon, open: GitHubFolderOpenIcon },
-  github: { closed: GitHubFolderIcon, open: GitHubFolderOpenIcon },
-};
-
-/* -----------------------------
-   SAFE ICON RENDERER
------------------------------- */
-type SafeIconProps = {
-  src: string | ((props: { className?: string | undefined }) => JSX.Element);
-  className?: string;
-};
-
-function SafeIcon({ src, className }: SafeIconProps) {
-  // if it's a React component (function)
-  if (typeof src === "function") {
-    const Comp = src;
-    return <Comp className={className} />;
-  }
-
-  // otherwise assume it's a URL string
-  return <img src={src} className={className} alt='' />;
-}
-
-/* -----------------------------
-   FILE ICON COMPONENT
------------------------------- */
-type FileIconComponentProps = {
-  item: ExplorerItem;
-  isOpen: boolean;
-};
-
-function FileIconComponent({ item, isOpen }: FileIconComponentProps) {
-  if (item.isDir) {
-    const normalizedName = item.name.toLowerCase();
-    const normalizedPath = item.path.toLowerCase();
-
-    const folderIcon = Object.entries(folderIconMap).find(([folderName]) => {
-      return (
-        normalizedName === folderName ||
-        normalizedPath.includes(`/${folderName}`) ||
-        normalizedPath.includes(`\\${folderName}`)
-      );
-    });
-
-    const Icon = folderIcon
-      ? isOpen
-        ? folderIcon[1].open
-        : folderIcon[1].closed
-      : isOpen
-        ? FolderOpenIcon
-        : FolderIcon;
-
-    return <SafeIcon src={Icon} className='w-4 h-4 shrink-0' />;
-  }
-
-  const ext = item.name.split(".").pop();
-  const icon = ext ? fileIconMap[ext.toLowerCase()] || FileIcon_ : FileIcon_;
-
-  return <SafeIcon src={icon} className='w-4 h-4 shrink-0' />;
-}
-
-/* -----------------------------
-   UI ICONS
------------------------------- */
-function MenuIcon() {
-  return (
-    <svg
-      width='16'
-      height='16'
-      viewBox='0 0 24 24'
-      fill='none'
-      stroke='currentColor'
-    >
-      <circle cx='12' cy='5' r='1' />
-      <circle cx='12' cy='12' r='1' />
-      <circle cx='12' cy='19' r='1' />
-    </svg>
-  );
-}
-
-function InboxIcon() {
-  return (
-    <svg
-      width='32'
-      height='32'
-      viewBox='0 0 24 24'
-      fill='none'
-      stroke='currentColor'
-      strokeWidth='1.5'
-    >
-      <path d='M5 5h14v11H5z' />
-      <path d='M5 5L9 1h6l4 4' />
-      <path d='M5 16l2 2h10l2-2' />
-    </svg>
-  );
-}
-
-function FolderOpenEmptyIcon() {
-  return (
-    <svg
-      width='32'
-      height='32'
-      viewBox='0 0 24 24'
-      fill='none'
-      stroke='currentColor'
-      strokeWidth='1.5'
-    >
-      <path d='M3 7v11c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7' />
-      <path d='M3 7h8L13 3h8c1.1 0 2 .9 2 2v2' />
-    </svg>
-  );
-}
-
-/* -----------------------------
-   WORKSPACE
+   WORKSPACE TYPES
 ------------------------------ */
 type ExplorerItem = {
   path: string;
@@ -193,6 +18,110 @@ type WorkspaceProps = {
   activeFile?: { path?: string } | null;
 };
 
+/* -----------------------------
+   DYNAMIC FILE & FOLDER ICON COMPONENT
+------------------------------ */
+type FileIconComponentProps = {
+  item: ExplorerItem;
+  isOpen: boolean;
+};
+
+function FileIconComponent({ item, isOpen }: FileIconComponentProps) {
+  let iconName: string | undefined;
+  const normalizedName = item.name.toLowerCase();
+
+  if (item.isDir) {
+    // 1. Look up specific folder configurations
+    const folderNames = (iconRegistry as any).folderNames || {};
+    const folderNamesExpanded = (iconRegistry as any).folderNamesExpanded || {};
+
+    if (isOpen) {
+      iconName = folderNamesExpanded[normalizedName] || folderNamesExpanded[item.name];
+    } else {
+      iconName = folderNames[normalizedName] || folderNames[item.name];
+    }
+
+    // 2. Fallback to default theme folder icons if no custom configuration matched
+    if (!iconName) {
+      iconName = isOpen
+        ? (iconRegistry as any).folderExpanded || "folder-open"
+        : (iconRegistry as any).folder || "folder";
+    }
+  } else {
+    // 1. Match full exact filename first (e.g., "package.json", ".gitignore")
+    const fileNames = (iconRegistry as any).fileNames || {};
+    iconName = fileNames[normalizedName] || fileNames[item.name];
+
+    // 2. Fallback to matching file extension (e.g., "js", "tsx")
+    if (!iconName) {
+      const ext = item.name.split(".").pop()?.toLowerCase();
+      const fileExtensions = (iconRegistry as any).fileExtensions || {};
+      if (ext) {
+        iconName = fileExtensions[ext];
+      }
+    }
+
+    // 3. Fallback to default theme file icon
+    if (!iconName) {
+      iconName = (iconRegistry as any).file || "file";
+    }
+  }
+
+  // 3. Resolve the path string from iconDefinitions
+  const iconDef = (iconRegistry.iconDefinitions as any)[iconName || ""];
+  let iconSrc: string;
+
+  if (iconDef && iconDef.iconPath) {
+    // Pull the target SVG filename (e.g., "javascript.svg")
+    const filename = iconDef.iconPath.split("/").pop();
+    // Resolve asset path dynamically via modern bundler context
+    iconSrc = new URL(`../assets/icons/${filename}`, import.meta.url).href;
+  } else {
+    // Safe hard-coded fallback if key lookup missing in asset folder
+    const fallbackFile = item.isDir
+      ? isOpen ? "folder-open.svg" : "folder.svg"
+      : "file.svg";
+    iconSrc = new URL(`../assets/icons/${fallbackFile}`, import.meta.url).href;
+  }
+
+  return <img src={iconSrc} className='w-4 h-4 shrink-0' alt='' />;
+}
+
+/* -----------------------------
+   UI ICONS
+------------------------------ */
+function MenuIcon() {
+  return (
+    <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor'>
+      <circle cx='12' cy='5' r='1' />
+      <circle cx='12' cy='12' r='1' />
+      <circle cx='12' cy='19' r='1' />
+    </svg>
+  );
+}
+
+function InboxIcon() {
+  return (
+    <svg width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.5'>
+      <path d='M5 5h14v11H5z' />
+      <path d='M5 5L9 1h6l4 4' />
+      <path d='M5 16l2 2h10l2-2' />
+    </svg>
+  );
+}
+
+function FolderOpenEmptyIcon() {
+  return (
+    <svg width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.5'>
+      <path d='M3 7v11c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7' />
+      <path d='M3 7h8L13 3h8c1.1 0 2 .9 2 2v2' />
+    </svg>
+  );
+}
+
+/* -----------------------------
+   WORKSPACE COMPONENT
+------------------------------ */
 export default function Workspace({
   activeTab,
   onFileOpen,

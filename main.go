@@ -1,8 +1,8 @@
 package main
 
 import (
+	"context"
 	"embed"
-
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -12,9 +12,6 @@ import (
 var assets embed.FS
 
 func main() {
-	// Boot the background process bridge for JS/TS language services
-
-
 	// Create an instance of the app structure
 	app := NewApp()
 
@@ -37,7 +34,13 @@ func main() {
 			Assets: assets,
 		},
 
-		OnStartup: app.startup,
+		// Connects Wails context setup to your App instance
+		OnStartup: app.Startup,
+
+		// Safely tears down file system watchers on application exit
+		OnShutdown: func(ctx context.Context) {
+			app.StopWatcher()
+		},
 
 		Bind: []interface{}{
 			app,
