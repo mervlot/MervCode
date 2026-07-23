@@ -34,10 +34,25 @@ type lspClient struct {
 	rootURI string
 }
 
-func (a *App) lspCommand(lang string) (string, []string) {
+func (a *App) lspCommand(lang, root string) (string, []string) {
 	switch lang {
 	case "typescript", "javascript":
-		return "typescript-language-server", []string{"--stdio"}
+		args := []string{"--stdio"}
+		// Explicitly point at this project's own local TypeScript
+		// install (frontend/node_modules/typescript) rather than
+		// relying on typescript-language-server's implicit resolution,
+		// which can silently fall back to an older/bundled TypeScript
+		// that doesn't understand this project's tsconfig options
+		// (e.g. "moduleResolution": "bundler", TS 5.0+). A version
+		// mismatch here shows up as degraded results — e.g. hover only
+		// showing "import Foo" with no resolved type/signature.
+		if root != "" {
+			tsserverPath := filepath.Join(root, "node_modules", "typescript", "lib", "tsserver.js")
+			if _, err := os.Stat(tsserverPath); err == nil {
+				args = append(args, "--tsserver-path", tsserverPath)
+			}
+		}
+		return "typescript-language-server", args
 	case "go":
 		return "gopls", []string{"-mode=stdio"}
 	default:
@@ -45,29 +60,53 @@ func (a *App) lspCommand(lang string) (string, []string) {
 	}
 }
 
-func (a *App) getLSPClient(lang string) *lspClient {
-	a.lspMu.Lock()
-	defer a.lspMu.Unlock()
-	return a.lspClients[lang]
+// clientKey identifies a running LSP server instance by both language and
+// project root, so opening files from two different sub-projects of the
+// same language (e.g. two separate React apps in one workspace, each with
+// its own tsconfig.json) get their own independently-rooted server instead
+// of sharing one client keyed by language alone.
+func clientKey(lang, root string) string {
+	return lang + "::" + root
 }
 
-func (a *App) ensureLSPClient(lang string) (*lspClient, error) {
+func (a *App) getLSPClient(lang, root string) *lspClient {
+	a.lspMu.Lock()
+	defer a.lspMu.Unlock()
+	return a.lspClients[clientKey(lang, root)]
+}
+
+// getLSPClientForFile resolves path's own nearest project root for lang
+// (its closest tsconfig.json/jsconfig.json/package.json for TS/JS, closest
+// go.mod for Go) and returns the LSP client already running for that
+// specific project, if any.
+func (a *App) getLSPClientForFile(lang, path string) *lspClient {
+	root := a.resolveLangRoot(lang, path)
+	return a.getLSPClient(lang, root)
+}
+
+func (a *App) ensureLSPClient(lang, root string) (*lspClient, error) {
+	key := clientKey(lang, root)
+
 	a.lspMu.Lock()
 
-	if cl, ok := a.lspClients[lang]; ok {
+	if cl, ok := a.lspClients[key]; ok {
 		a.lspMu.Unlock()
 		return cl, nil
 	}
 
-	cmdName, args := a.lspCommand(lang)
+	cmdName, args := a.lspCommand(lang, root)
 	if cmdName == "" {
 		a.lspMu.Unlock()
 		return nil, fmt.Errorf("no LSP server configured for %s", lang)
 	}
 
 	cmd := exec.Command(cmdName, args...)
-	if a.currentRoot != "" {
-		cmd.Dir = a.currentRoot
+	if root != "" {
+		// Run the server with its cwd set to its own project root (e.g.
+		// frontend/ for typescript-language-server) so it resolves the
+		// local "typescript"/node_modules install and tsconfig.json
+		// correctly, rather than the top-level workspace folder.
+		cmd.Dir = root
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -99,11 +138,15 @@ func (a *App) ensureLSPClient(lang string) (*lspClient, error) {
 
 	go cl.readLoop()
 
-	// Ensure tsconfig exists for JSX support in .tsx/.jsx files
-	a.ensureTSConfig(a.currentRoot)
+	// Ensure tsconfig exists for JSX support in .tsx/.jsx files, scoped to
+	// this language's own project root (e.g. frontend/), not the
+	// top-level workspace folder.
+	if lang == "typescript" || lang == "javascript" {
+		a.ensureTSConfig(root)
+	}
 
-	// Perform initialize handshake
-	if err := cl.initialize(a.currentRoot); err != nil {
+	// Perform initialize handshake, rooted at this language's own project folder.
+	if err := cl.initialize(root); err != nil {
 		a.lspMu.Unlock()
 		cl.close()
 		return nil, fmt.Errorf("initialize %s: %w", lang, err)
@@ -115,32 +158,32 @@ func (a *App) ensureLSPClient(lang string) (*lspClient, error) {
 			"typescript": map[string]any{
 				"validate": map[string]any{"enable": true},
 				"suggestions": map[string]any{
-					"completeFunctionCalls":   true,
+					"completeFunctionCalls":                    true,
 					"includeAutomaticOptionalChainCompletions": true,
 				},
 				"format": map[string]any{
-					"enable":           true,
+					"enable":                         true,
 					"insertSpaceAfterCommaDelimiter": true,
-					"insertSpaceAfterSemicolonInForStatements": true,
-					"insertSpaceBeforeAndAfterBinaryOperators": true,
-					"insertSpaceAfterKeywordsInControlFlowStatements": true,
-					"insertSpaceAfterFunctionKeywordForAnonymousFunctions": true,
+					"insertSpaceAfterSemicolonInForStatements":                   true,
+					"insertSpaceBeforeAndAfterBinaryOperators":                   true,
+					"insertSpaceAfterKeywordsInControlFlowStatements":            true,
+					"insertSpaceAfterFunctionKeywordForAnonymousFunctions":       true,
 					"insertSpaceAfterOpeningAndBeforeClosingNonemptyParenthesis": false,
-					"placeOpenBraceOnNewLineForFunctions": false,
-					"placeOpenBraceOnNewLineForControlBlocks": false,
+					"placeOpenBraceOnNewLineForFunctions":                        false,
+					"placeOpenBraceOnNewLineForControlBlocks":                    false,
 				},
 			},
 			"javascript": map[string]any{
 				"validate": map[string]any{"enable": true},
 				"suggestions": map[string]any{
-					"completeFunctionCalls":   true,
+					"completeFunctionCalls":                    true,
 					"includeAutomaticOptionalChainCompletions": true,
 				},
 			},
 		},
 	})
 
-	a.lspClients[lang] = cl
+	a.lspClients[key] = cl
 	a.lspMu.Unlock()
 	return cl, nil
 }
@@ -213,8 +256,8 @@ func (cl *lspClient) readLoop() {
 		}
 
 		var base struct {
-			ID     int64          `json:"id,omitempty"`
-			Method string         `json:"method,omitempty"`
+			ID     json.RawMessage `json:"id,omitempty"`
+			Method string          `json:"method,omitempty"`
 			Result json.RawMessage `json:"result,omitempty"`
 			Error  *struct {
 				Code    int    `json:"code"`
@@ -226,12 +269,28 @@ func (cl *lspClient) readLoop() {
 			continue
 		}
 
-		if base.ID != 0 {
-			// This is a response to a request
+		switch {
+		case len(base.ID) > 0 && base.Method != "":
+			// A message with BOTH id and method is a request *from the
+			// server to us* (e.g. workspace/configuration,
+			// client/registerCapability, window/workDoneProgress/create),
+			// not a response to one of our own requests. If we don't
+			// reply, servers like typescript-language-server can stall
+			// waiting on the answer (e.g. pulling config right after
+			// initialize), which shows up as the workspace never being
+			// fully understood.
+			cl.handleServerRequest(base.Method, base.ID, msg)
+
+		case len(base.ID) > 0:
+			// A response to one of our own requests.
+			var idNum int64
+			if err := json.Unmarshal(base.ID, &idNum); err != nil {
+				continue
+			}
 			cl.mu.Lock()
-			ch, ok := cl.pending[base.ID]
+			ch, ok := cl.pending[idNum]
 			if ok {
-				delete(cl.pending, base.ID)
+				delete(cl.pending, idNum)
 			}
 			cl.mu.Unlock()
 
@@ -243,10 +302,58 @@ func (cl *lspClient) readLoop() {
 				}
 				close(ch)
 			}
-		} else if base.Method != "" {
-			// This is a server notification
+
+		case base.Method != "":
+			// A notification from the server.
 			cl.handleNotification(base.Method, msg)
 		}
+	}
+}
+
+// handleServerRequest answers requests initiated by the server itself.
+// Every request the server sends MUST get a response (even a generic
+// null/success one) or well-behaved servers will block waiting for it.
+func (cl *lspClient) handleServerRequest(method string, id json.RawMessage, raw json.RawMessage) {
+	respond := func(result any) {
+		msg := map[string]any{
+			"jsonrpc": "2.0",
+			"id":      json.RawMessage(id),
+			"result":  result,
+		}
+		body, err := json.Marshal(msg)
+		if err != nil {
+			return
+		}
+		_ = cl.sendMessage(body)
+	}
+
+	switch method {
+	case "workspace/configuration":
+		// tsserver/gopls pull settings via this after initialize. Answer
+		// with one entry per requested item so it can finish applying
+		// the project configuration instead of stalling.
+		var wrapper struct {
+			Params struct {
+				Items []map[string]any `json:"items"`
+			} `json:"params"`
+		}
+		_ = json.Unmarshal(raw, &wrapper)
+		results := make([]any, len(wrapper.Params.Items))
+		for i := range results {
+			// Empty object is a safe "use your defaults" answer for any
+			// section we don't have specific overrides for.
+			results[i] = map[string]any{}
+		}
+		respond(results)
+
+	case "client/registerCapability", "client/unregisterCapability",
+		"window/workDoneProgress/create":
+		respond(nil)
+
+	default:
+		// Unknown server request: still must be answered so the server
+		// doesn't block waiting on us.
+		respond(nil)
 	}
 }
 
@@ -331,6 +438,51 @@ func (cl *lspClient) readMessage() ([]byte, error) {
 	}
 }
 
+// stripJSONCComments removes // line comments from JSONC content (as used
+// by tsconfig.json/jsconfig.json) so it can be parsed with encoding/json.
+// It respects string literals so URLs or paths containing "//" aren't
+// mistaken for comments.
+func stripJSONCComments(data []byte) []byte {
+	out := make([]byte, 0, len(data))
+	inString := false
+	escaped := false
+	for i := 0; i < len(data); i++ {
+		c := data[i]
+
+		if inString {
+			out = append(out, c)
+			if escaped {
+				escaped = false
+			} else if c == '\\' {
+				escaped = true
+			} else if c == '"' {
+				inString = false
+			}
+			continue
+		}
+
+		if c == '"' {
+			inString = true
+			out = append(out, c)
+			continue
+		}
+
+		if c == '/' && i+1 < len(data) && data[i+1] == '/' {
+			// Skip to end of line.
+			for i < len(data) && data[i] != '\n' {
+				i++
+			}
+			if i < len(data) {
+				out = append(out, '\n')
+			}
+			continue
+		}
+
+		out = append(out, c)
+	}
+	return out
+}
+
 func (a *App) ensureTSConfig(rootURI string) {
 	if rootURI == "" {
 		return
@@ -347,10 +499,14 @@ func (a *App) ensureTSConfig(rootURI string) {
 		if err != nil {
 			continue // file doesn't exist
 		}
-		// File exists — try to parse. If unparseable (comments, trailing commas),
-		// leave it alone rather than overwriting.
+		// tsconfig.json/jsconfig.json are JSONC (allow // line comments),
+		// which encoding/json can't parse directly. Strip line comments
+		// first so a normal, valid tsconfig doesn't get treated as
+		// "unparseable" and skipped.
 		var cfg map[string]any
-		if err := json.Unmarshal(data, &cfg); err != nil {
+		if err := json.Unmarshal(stripJSONCComments(data), &cfg); err != nil {
+			// Still unparseable (trailing commas, etc.) — leave it alone
+			// rather than risk overwriting a hand-written config.
 			return
 		}
 		opts, _ := cfg["compilerOptions"].(map[string]any)
@@ -423,28 +579,38 @@ func lspLangForFile(path string) string {
 }
 
 func (cl *lspClient) initialize(rootURI string) error {
+	uri := toURI(rootURI)
 	params := map[string]any{
 		"processId": nil,
-		"rootUri":   toURI(rootURI),
+		"rootUri":   uri,
+		// workspaceFolders is the modern (LSP 3.17) way of telling the
+		// server the actual project boundary; rootUri alone is
+		// deprecated and some servers only fully load project config
+		// (vs. a lone single-file "inferred project") when this is set.
+		"workspaceFolders": []map[string]any{
+			{"uri": uri, "name": filepath.Base(rootURI)},
+		},
 		"capabilities": map[string]any{
 			"textDocument": map[string]any{
-				"hover":          map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
-				"completion":     map[string]any{"completionItem": map[string]any{"snippetSupport": true, "commitCharactersSupport": true, "documentationFormat": []string{"markdown", "plaintext"}, "deprecatedSupport": true, "preselectSupport": true, "tagSupport": map[string]any{"valueSet": []int{1, 2}}}},
-				"definition":     map[string]any{},
-				"references":     map[string]any{},
-				"documentSymbol": map[string]any{},
-				"codeAction":     map[string]any{},
-				"signatureHelp":  map[string]any{},
-				"rename":         map[string]any{},
-				"foldingRange":   map[string]any{},
-				"inlayHint":      map[string]any{},
-				"semanticTokens": map[string]any{"requests": map[string]any{"full": map[string]any{"delta": true}, "range": true}},
+				"hover":           map[string]any{"contentFormat": []string{"markdown", "plaintext"}},
+				"completion":      map[string]any{"completionItem": map[string]any{"snippetSupport": true, "commitCharactersSupport": true, "documentationFormat": []string{"markdown", "plaintext"}, "deprecatedSupport": true, "preselectSupport": true, "tagSupport": map[string]any{"valueSet": []int{1, 2}}}},
+				"definition":      map[string]any{},
+				"references":      map[string]any{},
+				"documentSymbol":  map[string]any{},
+				"codeAction":      map[string]any{},
+				"signatureHelp":   map[string]any{},
+				"rename":          map[string]any{},
+				"foldingRange":    map[string]any{},
+				"inlayHint":       map[string]any{},
+				"semanticTokens":  map[string]any{"requests": map[string]any{"full": map[string]any{"delta": true}, "range": true}},
 				"synchronization": map[string]any{"didSave": true, "willSave": false},
-				"diagnostics":    map[string]any{},
+				"diagnostics":     map[string]any{},
 			},
 			"workspace": map[string]any{
-				"symbol":                map[string]any{},
+				"symbol":                 map[string]any{},
 				"didChangeConfiguration": map[string]any{},
+				"workspaceFolders":       true,
+				"configuration":          true,
 			},
 		},
 	}
@@ -480,37 +646,89 @@ func (a *App) closeAllLSPClients() {
 	}
 }
 
-// findProjectRoot walks up from filePath to find the project root directory.
-// It looks for node_modules or tsconfig.json or package.json as markers.
-func findProjectRoot(filePath string) string {
+// projectMarkersForLang returns the marker filenames that identify a
+// language's own project root, in priority order (first match wins), plus
+// whether the search should keep going up past the first candidate looking
+// for a *better* (more authoritative) marker before settling.
+func projectMarkersForLang(lang string) []string {
+	switch lang {
+	case "typescript", "javascript":
+		// tsconfig.json/jsconfig.json define the actual compiler project
+		// (this is what fixes JSX resolution etc.), package.json is a
+		// weaker fallback boundary.
+		return []string{"tsconfig.json", "jsconfig.json", "package.json"}
+	case "go":
+		// go.mod is the standard, authoritative module root for gopls.
+		return []string{"go.mod"}
+	default:
+		return []string{"tsconfig.json", "jsconfig.json", "package.json", "node_modules"}
+	}
+}
+
+// findProjectRootForLang walks up from filePath looking for the markers
+// appropriate to lang, so each language server is rooted at its *own*
+// project folder (e.g. frontend/ for TypeScript, even if the user opened
+// the parent repo folder as their workspace) rather than a shared,
+// possibly-too-broad workspace root.
+func findProjectRootForLang(lang, filePath string) string {
+	markers := projectMarkersForLang(lang)
 	dir := filepath.Dir(filePath)
 	for {
-		// Check if this directory contains project markers
-		for _, marker := range []string{"node_modules", "tsconfig.json", "jsconfig.json", "package.json"} {
+		for _, marker := range markers {
 			if _, err := os.Stat(filepath.Join(dir, marker)); err == nil {
 				return dir
 			}
 		}
-		// Walk up
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			// Reached filesystem root
+			// Reached filesystem root without finding a marker.
 			return filepath.Dir(filePath)
 		}
 		dir = parent
 	}
 }
 
-func (a *App) lspOpenFile(lang, path, content string) error {
-	// Infer workspace root from file if no workspace folder was opened
-	if a.currentRoot == "" {
-		root := findProjectRoot(path)
-		a.watcherMu.Lock()
-		a.currentRoot = root
-		a.watcherMu.Unlock()
-	}
+// resolveLangRoot returns the correct project root to hand to a given
+// language's LSP for the file being opened — i.e. the closest enclosing
+// tsconfig.json/jsconfig.json/package.json (or go.mod for Go) to that
+// specific file, not a single root shared across the whole language. This
+// matters for workspaces containing more than one project of the same
+// language (e.g. a parent folder with two separate React/TS apps, each
+// with its own tsconfig.json) — each file should resolve to *its own*
+// closest project, not whichever project's root happened to be found
+// first.
+//
+// The result is cached per (lang, containing directory) so repeated opens
+// of files in the same folder don't re-walk the filesystem, while files
+// from a different folder are resolved independently.
+func (a *App) resolveLangRoot(lang, path string) string {
+	dirKey := lang + "::" + filepath.Dir(path)
 
-	cl, err := a.ensureLSPClient(lang)
+	a.lspMu.Lock()
+	if root, ok := a.lspRoots[dirKey]; ok {
+		a.lspMu.Unlock()
+		return root
+	}
+	a.lspMu.Unlock()
+
+	root := findProjectRootForLang(lang, path)
+
+	a.lspMu.Lock()
+	a.lspRoots[dirKey] = root
+	a.lspMu.Unlock()
+
+	return root
+}
+
+func (a *App) lspOpenFile(lang, path, content string) error {
+	// Resolve this language's own project root (e.g. the folder containing
+	// tsconfig.json for TypeScript, or go.mod for Go) instead of reusing
+	// whatever folder was opened in the file explorer. This matches how
+	// editors normally start language servers: each one gets the nearest
+	// enclosing project folder for its language, not a single shared root.
+	root := a.resolveLangRoot(lang, path)
+
+	cl, err := a.ensureLSPClient(lang, root)
 	if err != nil {
 		return err
 	}
@@ -526,7 +744,7 @@ func (a *App) lspOpenFile(lang, path, content string) error {
 }
 
 func (a *App) lspChangeFile(lang, path, content string, version int) error {
-	cl := a.getLSPClient(lang)
+	cl := a.getLSPClientForFile(lang, path)
 	if cl == nil {
 		return fmt.Errorf("LSP not initialized for %s", lang)
 	}
@@ -543,7 +761,7 @@ func (a *App) lspChangeFile(lang, path, content string, version int) error {
 }
 
 func (a *App) lspCloseFile(lang, path string) error {
-	cl := a.getLSPClient(lang)
+	cl := a.getLSPClientForFile(lang, path)
 	if cl == nil {
 		return nil
 	}
@@ -556,7 +774,7 @@ func (a *App) lspCloseFile(lang, path string) error {
 }
 
 func (a *App) lspHover(lang, path string, line, col int) (*types.LSPHoverResult, error) {
-	cl := a.getLSPClient(lang)
+	cl := a.getLSPClientForFile(lang, path)
 	if cl == nil {
 		return nil, fmt.Errorf("LSP not initialized for %s", lang)
 	}
@@ -580,7 +798,7 @@ func (a *App) lspHover(lang, path string, line, col int) (*types.LSPHoverResult,
 }
 
 func (a *App) lspCompletion(lang, path string, line, col int) ([]types.LSPCompletionItem, error) {
-	cl := a.getLSPClient(lang)
+	cl := a.getLSPClientForFile(lang, path)
 	if cl == nil {
 		return nil, fmt.Errorf("LSP not initialized for %s", lang)
 	}
@@ -612,7 +830,7 @@ func (a *App) lspCompletion(lang, path string, line, col int) ([]types.LSPComple
 }
 
 func (a *App) lspDefinition(lang, path string, line, col int) (*types.LSPLocation, error) {
-	cl := a.getLSPClient(lang)
+	cl := a.getLSPClientForFile(lang, path)
 	if cl == nil {
 		return nil, fmt.Errorf("LSP not initialized for %s", lang)
 	}
@@ -638,7 +856,7 @@ func (a *App) lspDefinition(lang, path string, line, col int) (*types.LSPLocatio
 	if err := json.Unmarshal(resp, &locations); err != nil {
 		// Try LocationLink format: [{originSelectionRange, targetUri, targetRange, targetSelectionRange}]
 		var links []struct {
-			TargetURI string       `json:"targetUri"`
+			TargetURI   string         `json:"targetUri"`
 			TargetRange types.LSPRange `json:"targetRange"`
 		}
 		if err2 := json.Unmarshal(resp, &links); err2 != nil {
@@ -656,7 +874,7 @@ func (a *App) lspDefinition(lang, path string, line, col int) (*types.LSPLocatio
 }
 
 func (a *App) lspReferences(lang, path string, line, col int) ([]types.LSPLocation, error) {
-	cl := a.getLSPClient(lang)
+	cl := a.getLSPClientForFile(lang, path)
 	if cl == nil {
 		return nil, fmt.Errorf("LSP not initialized for %s", lang)
 	}

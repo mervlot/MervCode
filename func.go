@@ -31,11 +31,18 @@ type App struct {
 
 	lspMu      sync.Mutex
 	lspClients map[string]*lspClient
+	// lspRoots caches the resolved project root per (language, containing
+	// directory) — e.g. the directory containing the closest tsconfig.json
+	// for a TypeScript file, or the closest go.mod for a Go file — so each
+	// file resolves to its own nearest project, correctly distinguishing
+	// multiple same-language projects living under one workspace.
+	lspRoots map[string]string
 }
 
 func NewApp() *App {
 	return &App{
 		lspClients: make(map[string]*lspClient),
+		lspRoots:   make(map[string]string),
 	}
 }
 
@@ -278,6 +285,10 @@ func (a *App) stopWatcherInternal() {
 		a.watcher = nil
 	}
 	a.currentRoot = ""
+
+	a.lspMu.Lock()
+	a.lspRoots = make(map[string]string)
+	a.lspMu.Unlock()
 }
 
 func (a *App) WriteFile(path string, content string) error {
