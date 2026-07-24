@@ -14,6 +14,7 @@ import { useEditorSettings } from "../hooks/useEditorSettings";
 
 // Utilities
 import { Quit } from "../../wailsjs/go/main/App";
+import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { detectLang } from "../editor/detectLang.js";
 import { loadWorkspaceState, saveWorkspaceState } from "../lib/persistence.js";
 import type { FileTab, WorkspaceRoot } from "../types";
@@ -117,6 +118,27 @@ export default function Home() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activePath, tabs]);
+
+  // Listen for backend toolchain events
+  useEffect(() => {
+    const unsubs: (() => void)[] = [];
+    unsubs.push(
+      EventsOn("toolchain:languageMissing", (data: any) => {
+        console.log("Toolchain: language missing", data);
+      }),
+    );
+    unsubs.push(
+      EventsOn("toolchain:toolsMissing", (data: any) => {
+        console.log("Toolchain: tools missing", data);
+      }),
+    );
+    unsubs.push(
+      EventsOn("toolchain:installProgress", (data: any) => {
+        console.log(`Toolchain: ${data.message}`);
+      }),
+    );
+    return () => unsubs.forEach((fn) => fn());
+  }, []);
 
   function requestQuit() {
     if (tab.dirtyCount > 0) {

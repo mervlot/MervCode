@@ -1,3 +1,28 @@
+export namespace main {
+	
+	export class ToolStatus {
+	    languageInstalled: boolean;
+	    toolsInstalled: boolean;
+	    missingTools: string[];
+	    languageBinary: string;
+	    installCommand: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ToolStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.languageInstalled = source["languageInstalled"];
+	        this.toolsInstalled = source["toolsInstalled"];
+	        this.missingTools = source["missingTools"];
+	        this.languageBinary = source["languageBinary"];
+	        this.installCommand = source["installCommand"];
+	    }
+	}
+
+}
+
 export namespace types {
 	
 	export class FileItem {

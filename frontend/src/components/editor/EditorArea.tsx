@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import ToolBar from "./ToolBar";
 import TabBar from "./TabBar";
@@ -6,6 +7,8 @@ import FileViewer from "./FileViewer";
 import EmptyState from "./EmptyState";
 import TerminalPanel from "./TerminalPanel";
 import ErrorBoundary from "./ErrorBoundary";
+import ToolchainPrompt from "./ToolchainPrompt";
+import { CheckLanguageTools } from "../../../wailsjs/go/main/App";
 import type { EditorSettings, FileTab } from "../../types";
 import type { ContextMenuState } from "../../hooks/useTabManager";
 
@@ -74,8 +77,32 @@ export default function EditorArea({
   onSave,
   onOpenFolder,
 }: EditorAreaProps) {
+  const [toolchainLang, setToolchainLang] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!language || language === "plaintext") return;
+
+    CheckLanguageTools(language)
+      .then((status) => {
+        const needsPrompt =
+          !status.languageInstalled ||
+          (!status.toolsInstalled && (status.missingTools?.length ?? 0) > 0);
+        if (needsPrompt) {
+          setToolchainLang(language);
+        }
+      })
+      .catch(() => undefined);
+  }, [language, activePath]);
+
   return (
     <main className='flex-1 h-full min-w-0 flex flex-col bg-canvas relative'>
+      {toolchainLang && (
+        <ToolchainPrompt
+          language={toolchainLang}
+          onResolved={() => setToolchainLang(null)}
+          onDismiss={() => setToolchainLang(null)}
+        />
+      )}
       <ToolBar activeFile={activeFile} />
 
       {tabs.length > 0 && (

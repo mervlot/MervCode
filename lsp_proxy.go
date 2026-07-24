@@ -78,6 +78,31 @@ func (a *App) ensureLSPClient(lang, root string) (*lspClient, error) {
 		return nil, fmt.Errorf("no LSP server configured for %s", lang)
 	}
 
+	// Check if tools are installed before attempting to start LSP
+	toolStatus, err := a.CheckLanguageTools(lang)
+	if err != nil {
+		a.lspMu.Unlock()
+		return nil, fmt.Errorf("tool check failed: %w", err)
+	}
+
+	if !toolStatus.LanguageInstalled {
+		runtime.EventsEmit(a.ctx, "toolchain:languageMissing", map[string]any{
+			"language":       lang,
+			"installCommand": toolStatus.InstallCommand,
+		})
+		a.lspMu.Unlock()
+		return nil, fmt.Errorf("%s runtime not installed", lang)
+	}
+
+	if !toolStatus.ToolsInstalled {
+		runtime.EventsEmit(a.ctx, "toolchain:toolsMissing", map[string]any{
+			"language":     lang,
+			"missingTools": toolStatus.MissingTools,
+		})
+		a.lspMu.Unlock()
+		return nil, fmt.Errorf("missing tools: %v", toolStatus.MissingTools)
+	}
+
 	cmd := exec.Command(cmdName, args...)
 	if root != "" {
 		cmd.Dir = root

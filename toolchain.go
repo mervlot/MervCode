@@ -19,11 +19,14 @@ type FormatterConfig struct {
 }
 
 type LanguageToolchain struct {
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	LSP       *LSPConfig      `json:"lsp,omitempty"`
-	Formatter *FormatterConfig `json:"formatter,omitempty"`
-	Markers   []string        `json:"markers"`
+	ID                 string            `json:"id"`
+	Name               string            `json:"name"`
+	LSP                *LSPConfig        `json:"lsp,omitempty"`
+	Formatter          *FormatterConfig  `json:"formatter,omitempty"`
+	Markers            []string          `json:"markers"`
+	RuntimeBinary      string            `json:"runtimeBinary"`
+	RuntimeInstallURL  string            `json:"runtimeInstallUrl"`
+	ToolInstallMethods map[string]string `json:"toolInstallMethods"`
 }
 
 var toolchains map[string]*LanguageToolchain
@@ -41,7 +44,13 @@ func init() {
 				Command: "gofmt",
 				Stdin:   true,
 			},
-			Markers: []string{"go.mod"},
+			Markers:            []string{"go.mod"},
+			RuntimeBinary:      "go",
+			RuntimeInstallURL:  "https://go.dev/dl/",
+			ToolInstallMethods: map[string]string{
+				"gopls": "go install golang.org/x/tools/gopls@latest",
+				"gofmt": "Comes with Go runtime",
+			},
 		},
 	}
 }
