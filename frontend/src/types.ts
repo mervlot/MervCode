@@ -1,14 +1,35 @@
-// src/types.ts
+import type * as monaco from "monaco-editor";
+
+export interface FileItem {
+  name: string;
+  path: string;
+  isDir: boolean;
+  children?: FileItem[];
+}
 
 export interface FileTab {
   name: string;
   path: string;
   content?: string;
-  imageDataUrl?: string; // Stores the base64 source for images
   category?: string;
+  isDir: boolean;
 }
 
 export interface WorkspaceRoot {
   name: string;
   path: string;
+}
+
+export interface EditorSettings {
+  fontSize: number;
+  tabSize: number;
+  insertSpaces: boolean;
+  wordWrap: "on" | "off" | "wordWrapColumn" | "bounded";
+  minimap: boolean;
+  fontLigatures: boolean;
+  lineNumbers: "on" | "off" | "relative" | "interval";
+  autoSave: boolean;
+  formatOnSave: boolean;
+  formatOnPaste: boolean;
+  formatOnType: boolean;
 }

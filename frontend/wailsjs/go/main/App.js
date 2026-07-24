@@ -22,6 +22,10 @@ export function FolderDialog() {
   return window['go']['main']['App']['FolderDialog']();
 }
 
+export function FormatDocument(arg1, arg2, arg3) {
+  return window['go']['main']['App']['FormatDocument'](arg1, arg2, arg3);
+}
+
 export function GitStatus(arg1) {
   return window['go']['main']['App']['GitStatus'](arg1);
 }

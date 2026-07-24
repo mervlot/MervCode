@@ -5,7 +5,7 @@ import SourceControlPanel from "./SourceControlPanel";
 import SettingsPanel from "./SettingsPanel";
 import PlaceholderPanel from "./PlaceHolderPanel";
 import ErrorBoundary from "./ErrorBoundary";
-import type { FileTab, WorkspaceRoot } from "../../types";
+import type { EditorSettings, FileTab, WorkspaceRoot } from "../../types";
 
 interface SidebarProps {
   activeTab: string;
@@ -20,8 +20,8 @@ interface SidebarProps {
   setWorkspaceRoot: (root: WorkspaceRoot) => void;
   openFile: (file: FileTab, revealLine?: number) => void;
   openPathByString: (path: string, line?: number) => void;
-  fontSize: number;
-  setFontSize: (size: number) => void;
+  settings: EditorSettings;
+  onSettingsChange: (patch: Partial<EditorSettings>) => void;
 }
 
 export default function Sidebar({
@@ -37,8 +37,8 @@ export default function Sidebar({
   setWorkspaceRoot,
   openFile,
   openPathByString,
-  fontSize,
-  setFontSize,
+  settings,
+  onSettingsChange,
 }: SidebarProps) {
   function handleTabChange(tab: string) {
     if (sidebarCollapsed && tab === activeTab) {
@@ -76,8 +76,8 @@ export default function Sidebar({
               />
             ) : activeTab === "settings" ? (
               <SettingsPanel
-                fontSize={fontSize}
-                onFontSizeChange={setFontSize}
+                settings={settings}
+                onSettingsChange={onSettingsChange}
               />
             ) : (
               <PlaceholderPanel

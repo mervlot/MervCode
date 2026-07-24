@@ -5,16 +5,16 @@ import { setupMonaco } from "../editor/monaco/setup";
 import { applyLanguageFeatures } from "../editor/monaco/apply";
 import { getCustomActions } from "../editor/keybinding";
 import { useTheme } from "../contexts/ThemeContext";
+import type { EditorSettings } from "../types";
 
 interface EditorProps {
   doc?: string;
   langKey?: string;
   path?: string;
-  fontSize?: number;
+  settings?: EditorSettings;
   onCursorChange?: (pos: { line: number; column: number }) => void;
   onReady?: (editor: monaco.editor.IStandaloneCodeEditor) => void;
   onSave?: (content: string) => void | Promise<void>;
-  /** Fired on every keystroke so the host can track unsaved-changes state */
   onChange?: (content: string) => void;
 }
 
@@ -22,7 +22,7 @@ export default function Editor({
   doc = "",
   langKey = "plaintext",
   path = "active_file.txt",
-  fontSize = 14,
+  settings,
   onCursorChange,
   onReady,
   onSave,
@@ -33,7 +33,9 @@ export default function Editor({
   const modelRef = useRef<monaco.editor.ITextModel | null>(null);
   const onSaveRef = useRef(onSave);
   const onChangeRef = useRef(onChange);
+  const settingsRef = useRef(settings);
   const lspCleanupRef = useRef<(() => void) | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { theme } = useTheme();
 
   useEffect(() => {
@@ -43,6 +45,10 @@ export default function Editor({
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -61,21 +67,18 @@ export default function Editor({
       const editor = monaco.editor.create(containerRef.current, {
         model,
         automaticLayout: true,
-        minimap: { enabled: false },
-        fontLigatures: true,
-        smoothScrolling: true,
-        tabSize: 2,
-        insertSpaces: true,
-        formatOnPaste: true,
-        formatOnType: true,
         theme: theme === "light" ? "vs" : "vs-dark",
       });
 
       editorRef.current = editor;
 
-      // 👇 Apply custom hotkey modules
       const customActions = getCustomActions({
         onSave: async (content) => {
+          const s = settingsRef.current;
+          if (s?.formatOnSave) {
+            await editor.getAction("editor.action.formatDocument")?.run();
+            content = model.getValue();
+          }
           if (onSaveRef.current) {
             await onSaveRef.current(content);
           }
@@ -113,6 +116,19 @@ export default function Editor({
 
       const changeSub = model.onDidChangeContent(() => {
         onChangeRef.current?.(model.getValue());
+
+        const s = settingsRef.current;
+        if (s?.autoSave) {
+          if (autoSaveTimerRef.current) {
+            clearTimeout(autoSaveTimerRef.current);
+          }
+          autoSaveTimerRef.current = setTimeout(async () => {
+            if (s?.formatOnSave) {
+              await editor.getAction("editor.action.formatDocument")?.run();
+            }
+            onSaveRef.current?.(model.getValue());
+          }, 1000);
+        }
       });
 
       editor.addCommand(
@@ -127,6 +143,9 @@ export default function Editor({
       return () => {
         lspCleanupRef.current?.();
         lspCleanupRef.current = null;
+        if (autoSaveTimerRef.current) {
+          clearTimeout(autoSaveTimerRef.current);
+        }
         changeSub.dispose();
         editor.dispose();
         const existingModel = monaco.editor.getModel(uri);
@@ -134,8 +153,6 @@ export default function Editor({
       };
     } catch (error) {
       console.error("[MervCode] Failed to initialize Monaco editor:", error);
-      // Swallow so the surrounding ErrorBoundary/tab UI stays intact rather
-      // than crashing the whole render tree over one bad file.
       return undefined;
     }
   }, [path]);
@@ -166,8 +183,21 @@ export default function Editor({
   }, [theme]);
 
   useEffect(() => {
-    editorRef.current?.updateOptions({ fontSize });
-  }, [fontSize]);
+    const editor = editorRef.current;
+    if (!editor || !settings) return;
+
+    editor.updateOptions({
+      fontSize: settings.fontSize,
+      tabSize: settings.tabSize,
+      insertSpaces: settings.insertSpaces,
+      wordWrap: settings.wordWrap,
+      minimap: { enabled: settings.minimap },
+      fontLigatures: settings.fontLigatures,
+      lineNumbers: settings.lineNumbers,
+      formatOnPaste: settings.formatOnPaste,
+      formatOnType: settings.formatOnType,
+    });
+  }, [settings]);
 
   return <div ref={containerRef} className='w-full h-full min-h-0' />;
 }

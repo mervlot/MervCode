@@ -6,7 +6,7 @@ import FileViewer from "./FileViewer";
 import EmptyState from "./EmptyState";
 import TerminalPanel from "./TerminalPanel";
 import ErrorBoundary from "./ErrorBoundary";
-import type { FileTab } from "../../types";
+import type { EditorSettings, FileTab } from "../../types";
 import type { ContextMenuState } from "../../hooks/useTabManager";
 
 interface EditorAreaProps {
@@ -14,7 +14,7 @@ interface EditorAreaProps {
   activePath: string | null;
   setActivePath: React.Dispatch<React.SetStateAction<string | null>>;
   language: string;
-  fontSize: number;
+  settings: EditorSettings;
   cursor: { line: number; column: number };
   setCursor: React.Dispatch<React.SetStateAction<{ line: number; column: number }>>;
   activeFile: FileTab | undefined;
@@ -47,7 +47,7 @@ export default function EditorArea({
   activePath,
   setActivePath,
   language,
-  fontSize,
+  settings,
   cursor,
   setCursor,
   activeFile,
@@ -122,7 +122,7 @@ export default function EditorArea({
                 <FileViewer
                   tab={t}
                   language={language}
-                  fontSize={fontSize}
+                  settings={settings}
                   onCursorChange={setCursor}
                   onEditorReady={onEditorReady}
                   onChange={onChange}

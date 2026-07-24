@@ -12,6 +12,8 @@ export function DeletePath(arg1:string):Promise<void>;
 
 export function FolderDialog():Promise<string>;
 
+export function FormatDocument(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function GitStatus(arg1:string):Promise<types.GitStatusResult>;
 
 export function Greet(arg1:string):Promise<string>;

@@ -3,12 +3,12 @@ import Editor from "../../pages/Editor";
 import ImageViewer from "../../pages/ImageViewer";
 import SpreadSheetViewer from "../../pages/SpreadSheetViewer";
 import ErrorBoundary from "./ErrorBoundary";
-import type { FileTab } from "../../types";
+import type { EditorSettings, FileTab } from "../../types";
 
 interface FileViewerProps {
   tab: FileTab;
   language: string;
-  fontSize: number;
+  settings: EditorSettings;
   onCursorChange: (pos: { line: number; column: number }) => void;
   onEditorReady: (path: string, editor: monaco.editor.IStandaloneCodeEditor) => void;
   onChange: (path: string, content: string) => void;
@@ -18,7 +18,7 @@ interface FileViewerProps {
 export default function FileViewer({
   tab,
   language,
-  fontSize,
+  settings,
   onCursorChange,
   onEditorReady,
   onChange,
@@ -73,7 +73,7 @@ export default function FileViewer({
           doc={tab.content ?? ""}
           langKey={language}
           path={tab.path}
-          fontSize={fontSize}
+          settings={settings}
           onCursorChange={onCursorChange}
           onReady={(editor) => onEditorReady(tab.path, editor)}
           onChange={(content) => onChange(tab.path, content)}

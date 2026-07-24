@@ -1,8 +1,8 @@
-import { useTheme } from "../../contexts/ThemeContext";
+import type { EditorSettings } from "../../types";
 
 interface SettingsPanelProps {
-  fontSize: number;
-  onFontSizeChange: (size: number) => void;
+  settings: EditorSettings;
+  onSettingsChange: (patch: Partial<EditorSettings>) => void;
 }
 
 function Toggle({
@@ -31,11 +31,9 @@ function Toggle({
 }
 
 export default function SettingsPanel({
-  fontSize,
-  onFontSizeChange,
+  settings,
+  onSettingsChange,
 }: SettingsPanelProps) {
-  const { theme, setTheme } = useTheme();
-
   return (
     <div className='h-full flex flex-col overflow-hidden bg-panel'>
       <div className='flex items-center justify-between px-3 py-2 border-b border-subtle text-[11px] uppercase tracking-wider text-tertiary'>
@@ -48,33 +46,156 @@ export default function SettingsPanel({
             Appearance
           </h3>
           <div className='rounded border border-subtle bg-surface p-3 space-y-3'>
-            <div className='flex items-center justify-between'>
-              <div>
-                <p className='text-[12.5px] text-primary'>Light mode</p>
-                <p className='text-[11px] text-tertiary'>
-                  Switch between dark and light theme.
-                </p>
-              </div>
-              <Toggle
-                checked={theme === "light"}
-                onChange={() => setTheme(theme === "dark" ? "light" : "dark")}
-              />
-            </div>
-
             <div>
               <div className='flex items-center justify-between mb-1.5'>
                 <p className='text-[12.5px] text-primary'>Editor font size</p>
                 <span className='text-[11px] text-tertiary tabular-nums'>
-                  {fontSize}px
+                  {settings.fontSize}px
                 </span>
               </div>
               <input
                 type='range'
                 min={10}
                 max={22}
-                value={fontSize}
-                onChange={(e) => onFontSizeChange(Number(e.target.value))}
+                value={settings.fontSize}
+                onChange={(e) => onSettingsChange({ fontSize: Number(e.target.value) })}
                 className='w-full accent-[#DC143C]'
+              />
+            </div>
+
+            <div>
+              <div className='flex items-center justify-between mb-1.5'>
+                <p className='text-[12.5px] text-primary'>Tab size</p>
+                <span className='text-[11px] text-tertiary tabular-nums'>
+                  {settings.tabSize}
+                </span>
+              </div>
+              <input
+                type='range'
+                min={1}
+                max={8}
+                value={settings.tabSize}
+                onChange={(e) => onSettingsChange({ tabSize: Number(e.target.value) })}
+                className='w-full accent-[#DC143C]'
+              />
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h3 className='mb-2 text-[11px] uppercase tracking-wider text-faint'>
+            Editor
+          </h3>
+          <div className='rounded border border-subtle bg-surface p-3 space-y-3'>
+            <div className='flex items-center justify-between'>
+              <div>
+                <p className='text-[12.5px] text-primary'>Insert spaces</p>
+                <p className='text-[11px] text-tertiary'>Use spaces when pressing Tab.</p>
+              </div>
+              <Toggle
+                checked={settings.insertSpaces}
+                onChange={() => onSettingsChange({ insertSpaces: !settings.insertSpaces })}
+              />
+            </div>
+
+            <div className='flex items-center justify-between'>
+              <div>
+                <p className='text-[12.5px] text-primary'>Word wrap</p>
+              </div>
+              <select
+                value={settings.wordWrap}
+                onChange={(e) => onSettingsChange({ wordWrap: e.target.value as EditorSettings["wordWrap"] })}
+                className='bg-chip border border-subtle rounded px-2 py-1 text-[11px] text-primary'
+              >
+                <option value='off'>Off</option>
+                <option value='on'>On</option>
+                <option value='wordWrapColumn'>Column</option>
+                <option value='bounded'>Bounded</option>
+              </select>
+            </div>
+
+            <div className='flex items-center justify-between'>
+              <div>
+                <p className='text-[12.5px] text-primary'>Minimap</p>
+              </div>
+              <Toggle
+                checked={settings.minimap}
+                onChange={() => onSettingsChange({ minimap: !settings.minimap })}
+              />
+            </div>
+
+            <div className='flex items-center justify-between'>
+              <div>
+                <p className='text-[12.5px] text-primary'>Font ligatures</p>
+              </div>
+              <Toggle
+                checked={settings.fontLigatures}
+                onChange={() => onSettingsChange({ fontLigatures: !settings.fontLigatures })}
+              />
+            </div>
+
+            <div className='flex items-center justify-between'>
+              <div>
+                <p className='text-[12.5px] text-primary'>Line numbers</p>
+              </div>
+              <select
+                value={settings.lineNumbers}
+                onChange={(e) => onSettingsChange({ lineNumbers: e.target.value as EditorSettings["lineNumbers"] })}
+                className='bg-chip border border-subtle rounded px-2 py-1 text-[11px] text-primary'
+              >
+                <option value='on'>On</option>
+                <option value='off'>Off</option>
+                <option value='relative'>Relative</option>
+                <option value='interval'>Interval</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h3 className='mb-2 text-[11px] uppercase tracking-wider text-faint'>
+            Formatting
+          </h3>
+          <div className='rounded border border-subtle bg-surface p-3 space-y-3'>
+            <div className='flex items-center justify-between'>
+              <div>
+                <p className='text-[12.5px] text-primary'>Auto save</p>
+                <p className='text-[11px] text-tertiary'>Save after 1s of inactivity.</p>
+              </div>
+              <Toggle
+                checked={settings.autoSave}
+                onChange={() => onSettingsChange({ autoSave: !settings.autoSave })}
+              />
+            </div>
+
+            <div className='flex items-center justify-between'>
+              <div>
+                <p className='text-[12.5px] text-primary'>Format on save</p>
+                <p className='text-[11px] text-tertiary'>Format document on save.</p>
+              </div>
+              <Toggle
+                checked={settings.formatOnSave}
+                onChange={() => onSettingsChange({ formatOnSave: !settings.formatOnSave })}
+              />
+            </div>
+
+            <div className='flex items-center justify-between'>
+              <div>
+                <p className='text-[12.5px] text-primary'>Format on paste</p>
+              </div>
+              <Toggle
+                checked={settings.formatOnPaste}
+                onChange={() => onSettingsChange({ formatOnPaste: !settings.formatOnPaste })}
+              />
+            </div>
+
+            <div className='flex items-center justify-between'>
+              <div>
+                <p className='text-[12.5px] text-primary'>Format on type</p>
+              </div>
+              <Toggle
+                checked={settings.formatOnType}
+                onChange={() => onSettingsChange({ formatOnType: !settings.formatOnType })}
               />
             </div>
           </div>

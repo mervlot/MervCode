@@ -10,14 +10,13 @@ import StatusBar from "../components/editor/StatusBar";
 // Hooks
 import useTabManager from "../hooks/useTabManager";
 import useFileOps from "../hooks/useFileOps";
+import { useEditorSettings } from "../hooks/useEditorSettings";
 
 // Utilities
 import { Quit } from "../../wailsjs/go/main/App";
 import { detectLang } from "../editor/detectLang.js";
 import { loadWorkspaceState, saveWorkspaceState } from "../lib/persistence.js";
 import type { FileTab, WorkspaceRoot } from "../types";
-
-const FONT_SIZE_KEY = "mervcode:fontSize";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("explorer");
@@ -27,11 +26,7 @@ export default function Home() {
   const [terminalOpen, setTerminalOpen] = useState(true);
   const [workspaceRoot, setWorkspaceRoot] = useState<WorkspaceRoot | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [fontSize, setFontSize] = useState<number>(() => {
-    if (typeof window === "undefined") return 14;
-    const stored = Number(window.localStorage.getItem(FONT_SIZE_KEY));
-    return stored >= 10 && stored <= 22 ? stored : 14;
-  });
+  const { settings, updateSettings } = useEditorSettings();
 
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
   const [tabs, setTabs] = useState<FileTab[]>([]);
@@ -60,11 +55,6 @@ export default function Home() {
     if (!tab.activeFile) return "plaintext";
     return detectLang(tab.activeFile.name);
   }, [tab.activeFile]);
-
-  // Persist font size
-  useEffect(() => {
-    window.localStorage.setItem(FONT_SIZE_KEY, String(fontSize));
-  }, [fontSize]);
 
   // Restore workspace state on mount
   useEffect(() => {
@@ -188,8 +178,8 @@ export default function Home() {
           setWorkspaceRoot={setWorkspaceRoot}
           openFile={openFile}
           openPathByString={openPathByString}
-          fontSize={fontSize}
-          setFontSize={setFontSize}
+          settings={settings}
+          onSettingsChange={updateSettings}
         />
 
         <EditorArea
@@ -197,7 +187,7 @@ export default function Home() {
           activePath={activePath}
           setActivePath={setActivePath}
           language={language}
-          fontSize={fontSize}
+          settings={settings}
           cursor={cursor}
           setCursor={setCursor}
           activeFile={tab.activeFile}
