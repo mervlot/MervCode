@@ -22,6 +22,7 @@ interface SidebarProps {
   openPathByString: (path: string, line?: number) => void;
   settings: EditorSettings;
   onSettingsChange: (patch: Partial<EditorSettings>) => void;
+  onOpenSettingsTab: () => void;
 }
 
 export default function Sidebar({
@@ -39,6 +40,7 @@ export default function Sidebar({
   openPathByString,
   settings,
   onSettingsChange,
+  onOpenSettingsTab,
 }: SidebarProps) {
   function handleTabChange(tab: string) {
     if (sidebarCollapsed && tab === activeTab) {
@@ -53,10 +55,10 @@ export default function Sidebar({
 
   return (
     <>
-      <LeftBar activeTab={activeTab} onTabChange={handleTabChange} />
+      <LeftBar activeTab={activeTab} onTabChange={handleTabChange} onOpenSettingsTab={onOpenSettingsTab} />
 
       {!sidebarCollapsed && (
-        <div style={{ width: sidebarWidth }} className='h-full shrink-0 relative'>
+        <div style={{ width: sidebarWidth }} className='h-full shrink-0 relative border-r border-subtle'>
           <ErrorBoundary label={`${activeTab} panel`} resetKey={activeTab}>
             {activeTab === "explorer" ? (
               <ExplorerPanel

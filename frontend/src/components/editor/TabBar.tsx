@@ -33,7 +33,7 @@ export default function TabBar({
   onDragEnd,
 }: TabBarProps) {
   return (
-    <div className='flex min-w-0 items-center gap-px overflow-x-auto border-b border-subtle-strong bg-panel shrink-0'>
+    <div className='flex min-w-0 items-center gap-px overflow-x-auto bg-panel shrink-0'>
       <AnimatePresence>
         {tabs.map((t) => {
           const isActive = t.path === activePath;
@@ -61,7 +61,7 @@ export default function TabBar({
               className={`group flex w-40 shrink-0 items-center gap-2 text-[12px] relative cursor-pointer transition-colors duration-100 border-r border-subtle ${
                 isActive
                   ? "bg-canvas text-primary"
-                  : "bg-tab text-secondary hover:bg-hover hover:text-primary"
+                  : "bg-tab text-secondary hover:bg-hover hover:text-primary border-b border-subtle-strong"
               } ${isDragging ? "opacity-70" : ""} ${isDropTarget ? "bg-accent-soft" : ""}`}
             >
               <div
@@ -102,6 +102,7 @@ export default function TabBar({
           );
         })}
       </AnimatePresence>
+      <div className='flex-1 self-stretch border-b border-subtle-strong' />
     </div>
   );
 }

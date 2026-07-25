@@ -11,7 +11,8 @@
    THEME TOKENS
    ============================================================ */
 :root,
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+[data-theme="dark"] {
   color-scheme: dark;
 
   --bg-app: #000000;
@@ -191,64 +192,12 @@ body {
     "ss08", "ss09";
 }
 
-body {
-  cursor: url("./assets/cursor/pointer.cur"), default;
-}
-
-input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not(
-    [type="button"]
-  ):not([type="submit"]):not([type="color"]),
-textarea,
-[contenteditable="true"] {
-  cursor: text;
-}
-
-input[type="range"],
-input[type="checkbox"],
-input[type="radio"] {
-  cursor: url("./assets/cursor/pointer.cur"), pointer;
-}
-
-.cm-editor,
-.cm-editor .cm-content,
-.cm-editor .cm-gutters {
-  cursor: text !important;
-}
-
-a,
-button,
-[role="button"] {
-  cursor: url("./assets/cursor/link.cur"), pointer;
-}
-
-:disabled,
-[aria-disabled="true"] {
-  cursor: url("./assets/cursor/unavailable.cur"), not-allowed;
-}
-
 .draggable {
   --wails-draggable: drag;
-  cursor: url("./assets/cursor/move.cur"), move;
 }
 
 .no-drag {
   --wails-draggable: no-drag;
-}
-
-.resize-horizontal {
-  cursor: url("./assets/cursor/horz.cur"), ew-resize;
-}
-
-.resize-vertical {
-  cursor: url("./assets/cursor/vert.cur"), ns-resize;
-}
-
-.resize-diagonal-1 {
-  cursor: url("./assets/cursor/dgn1.cur"), nwse-resize;
-}
-
-.resize-diagonal-2 {
-  cursor: url("./assets/cursor/dgn2.cur"), nesw-resize;
 }
 
 ::-webkit-scrollbar {

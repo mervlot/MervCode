@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Quit } from "../../../wailsjs/go/main/App";
 import CommandPalette, { type Command } from "./CommandPalette";
+import TopMenu from "./TopMenu";
 import { useTheme } from "../../contexts/ThemeContext";
 import type { FileTab } from "../../types";
 
@@ -16,8 +17,6 @@ declare global {
 }
 
 interface HeaderProps {
-  recent: string;
-  hasUnsavedChanges?: boolean;
   onRequestQuit?: () => void;
   terminalOpen: boolean;
   setTerminalOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -32,11 +31,10 @@ interface HeaderProps {
   tabs: FileTab[];
   paletteOpen: boolean;
   setPaletteOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  onOpenSettingsTab: () => void;
 }
 
 export default function Header({
-  recent,
-  hasUnsavedChanges,
   onRequestQuit,
   terminalOpen,
   setTerminalOpen,
@@ -51,6 +49,7 @@ export default function Header({
   tabs,
   paletteOpen,
   setPaletteOpen,
+  onOpenSettingsTab,
 }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const [isMaximized, setIsMaximized] = useState(false);
@@ -133,10 +132,10 @@ export default function Header({
         id: "open-settings",
         label: "Settings",
         category: "Navigate",
+        shortcut: "Ctrl+,",
         icon: "gear",
         run: () => {
-          setSidebarCollapsed(false);
-          setActiveTab("settings");
+          onOpenSettingsTab();
         },
       },
       {
@@ -163,7 +162,7 @@ export default function Header({
     });
 
     return list;
-  }, [terminalOpen, sidebarCollapsed, theme, tabs, activePath]);
+  }, [terminalOpen, sidebarCollapsed, theme, tabs, activePath, onOpenSettingsTab]);
 
   const minimize = () => window.runtime?.WindowMinimise?.();
 
@@ -185,15 +184,21 @@ export default function Header({
 
   return (
     <header className='h-9 w-full bg-panel border-b border-subtle flex items-center select-none shrink-0'>
-      <div className='draggable flex-1 h-full flex items-center px-3'>
-        {recent && (
-          <div className='no-drag px-3 h-7 flex items-center gap-1.5 rounded bg-surface border border-subtle text-[12px] text-secondary'>
-            {hasUnsavedChanges && (
-              <span className='h-1.5 w-1.5 rounded-full bg-accent shrink-0' />
-            )}
-            <span className='truncate'>{recent}</span>
-          </div>
-        )}
+      <TopMenu
+        onOpenSettingsTab={onOpenSettingsTab}
+        saveActiveFile={saveActiveFile}
+        toggleTheme={toggleTheme}
+        terminalOpen={terminalOpen}
+        setTerminalOpen={setTerminalOpen}
+        sidebarCollapsed={sidebarCollapsed}
+        setSidebarCollapsed={setSidebarCollapsed}
+        setPaletteOpen={setPaletteOpen}
+        closeAllTabs={closeAllTabs}
+        activePath={activePath}
+        closeTab={closeTab}
+      />
+      <div className='draggable flex-1 h-full flex items-center justify-center'>
+        <span className='text-[12px] font-semibold text-faint tracking-wide select-none'>MERVE CODE</span>
       </div>
       <CommandPalette
         open={paletteOpen}

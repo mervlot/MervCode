@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Settings } from "lucide-react";
 import iconRegistry from "../../vars/icon.json";
 
 const fileNames = (iconRegistry as any).fileNames || {};
@@ -26,6 +27,10 @@ function SafeIcon({ src, className }: { src: string; className: string }) {
 }
 
 export function FileTabIcon({ name }: { name: string }) {
+  if (name === "Settings") {
+    return <Settings size={14} className='shrink-0 text-tertiary' />;
+  }
+
   const normalizedName = name.toLowerCase();
   const ext = name.split(".").pop()?.toLowerCase();
 

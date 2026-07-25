@@ -3,12 +3,14 @@ import Editor from "../../pages/Editor";
 import ImageViewer from "../../pages/ImageViewer";
 import SpreadSheetViewer from "../../pages/SpreadSheetViewer";
 import ErrorBoundary from "./ErrorBoundary";
+import SettingsPanel from "./SettingsPanel";
 import type { EditorSettings, FileTab } from "../../types";
 
 interface FileViewerProps {
   tab: FileTab;
   language: string;
   settings: EditorSettings;
+  onSettingsChange: (patch: Partial<EditorSettings>) => void;
   onCursorChange: (pos: { line: number; column: number }) => void;
   onEditorReady: (path: string, editor: monaco.editor.IStandaloneCodeEditor) => void;
   onChange: (path: string, content: string) => void;
@@ -19,6 +21,7 @@ export default function FileViewer({
   tab,
   language,
   settings,
+  onSettingsChange,
   onCursorChange,
   onEditorReady,
   onChange,
@@ -26,7 +29,9 @@ export default function FileViewer({
 }: FileViewerProps) {
   return (
     <ErrorBoundary label={tab.name} resetKey={tab.path}>
-      {tab.category === "image" ? (
+      {tab.category === "settings" ? (
+        <SettingsPanel settings={settings} onSettingsChange={onSettingsChange} />
+      ) : tab.category === "image" ? (
         <ImageViewer
           path={tab.path}
           name={tab.name}

@@ -18,6 +18,7 @@ interface EditorAreaProps {
   setActivePath: React.Dispatch<React.SetStateAction<string | null>>;
   language: string;
   settings: EditorSettings;
+  onSettingsChange: (patch: Partial<EditorSettings>) => void;
   cursor: { line: number; column: number };
   setCursor: React.Dispatch<React.SetStateAction<{ line: number; column: number }>>;
   activeFile: FileTab | undefined;
@@ -51,6 +52,7 @@ export default function EditorArea({
   setActivePath,
   language,
   settings,
+  onSettingsChange,
   cursor,
   setCursor,
   activeFile,
@@ -150,6 +152,7 @@ export default function EditorArea({
                   tab={t}
                   language={language}
                   settings={settings}
+                  onSettingsChange={onSettingsChange}
                   onCursorChange={setCursor}
                   onEditorReady={onEditorReady}
                   onChange={onChange}

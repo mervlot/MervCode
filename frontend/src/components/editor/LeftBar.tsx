@@ -1,11 +1,13 @@
+import { Settings } from "lucide-react";
 import tabs from "../../vars/sideBarTabs";
 
 interface LeftBarProps {
   activeTab: string;
   onTabChange?: (tabId: string) => void;
+  onOpenSettingsTab?: () => void;
 }
 
-export default function LeftBar({ activeTab, onTabChange }: LeftBarProps) {
+export default function LeftBar({ activeTab, onTabChange, onOpenSettingsTab }: LeftBarProps) {
   const handleTabClick = (tabId: string) => {
     if (onTabChange) onTabChange(tabId);
   };
@@ -50,21 +52,14 @@ export default function LeftBar({ activeTab, onTabChange }: LeftBarProps) {
 
       <div className='w-full flex flex-col items-center gap-1'>
         <button
-          onClick={() => handleTabClick("settings")}
+          onClick={onOpenSettingsTab}
           title='Settings'
           className={`
             relative w-9 h-9 flex items-center justify-center rounded text-[15px] transition-all duration-100
-            ${
-              activeTab === "settings"
-                ? "text-primary bg-active"
-                : "text-tertiary hover:text-secondary hover:bg-hover"
-            }
+            text-tertiary hover:text-secondary hover:bg-hover
           `}
         >
-          <i className='bi bi-gear' />
-          {activeTab === "settings" && (
-            <div className='absolute left-0 top-2 bottom-2 w-0.5 bg-accent rounded-r' />
-          )}
+          <Settings size={18} />
         </button>
       </div>
     </aside>

@@ -74,6 +74,10 @@ export function LSPReferences(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['LSPReferences'](arg1, arg2, arg3, arg4);
 }
 
+export function OpenSettingsWindow() {
+  return window['go']['main']['App']['OpenSettingsWindow']();
+}
+
 export function Quit() {
   return window['go']['main']['App']['Quit']();
 }

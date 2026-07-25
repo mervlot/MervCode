@@ -47,6 +47,7 @@ function dirname(path: string) {
 }
 
 function sortItems(items: FileItem[]): FileItem[] {
+  if (!items) return [];
   return [...items].sort((a, b) => {
     if (a.isDir && !b.isDir) return -1;
     if (!a.isDir && b.isDir) return 1;
@@ -194,7 +195,7 @@ export default function ExplorerPanel({
         if (!cache[dirPath]) {
           try {
             const children = await ReadDir(dirPath);
-            setCache((prev) => ({ ...prev, [dirPath]: sortItems(children) }));
+            setCache((prev) => ({ ...prev, [dirPath]: children ? sortItems(children) : [] }));
           } catch {
             // directory may no longer exist — ignore and keep revealing what we can
           }
@@ -231,6 +232,7 @@ export default function ExplorerPanel({
   async function refreshDir(path: string) {
     try {
       const items = await ReadDir(path);
+      if (!items) return;
       const sortedItems = sortItems(items);
 
       setCache((prev) => ({
@@ -253,6 +255,7 @@ export default function ExplorerPanel({
 
     try {
       const items = await ReadDir(root.path);
+      if (!items) return;
       const sortedItems = sortItems(items);
 
       setRoot((prev) =>
@@ -292,6 +295,7 @@ export default function ExplorerPanel({
   async function loadRoot(path: string) {
     try {
       const items = await ReadDir(path);
+      if (!items) return;
       const sortedItems = sortItems(items);
       const nextRoot: RootNode = {
         path,
@@ -330,7 +334,7 @@ export default function ExplorerPanel({
     if (!isOpen) {
       try {
         const children = await ReadDir(item.path);
-        setCache((prev) => ({ ...prev, [item.path]: sortItems(children) }));
+        setCache((prev) => ({ ...prev, [item.path]: children ? sortItems(children) : [] }));
       } catch (err) {
         console.warn(
           `Could not read directory (possibly cloud placeholder): ${item.path}`,

@@ -538,6 +538,17 @@ func (a *App) GitStatus(rootPath string) (*types.GitStatusResult, error) {
 }
 
 // ============================================================
+// SETTINGS — Toggle full settings mode
+// ============================================================
+
+func (a *App) OpenSettingsWindow() error {
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "mervcode:toggleSettings", true)
+	}
+	return nil
+}
+
+// ============================================================
 // LSP — Language Server Protocol proxy
 // ============================================================
 

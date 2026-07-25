@@ -39,6 +39,8 @@ export function LSPOpenFile(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function LSPReferences(arg1:string,arg2:string,arg3:number,arg4:number):Promise<Array<types.LSPLocation>>;
 
+export function OpenSettingsWindow():Promise<void>;
+
 export function Quit():Promise<void>;
 
 export function ReadDir(arg1:string):Promise<Array<types.FileItem>>;

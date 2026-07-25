@@ -165,11 +165,25 @@ export default function Home() {
     window.addEventListener("mouseup", onUp);
   };
 
+  function openSettingsTab() {
+    const SETTINGS_PATH = "mervcode://settings";
+    if (tabs.some((t) => t.path === SETTINGS_PATH)) {
+      setActivePath(SETTINGS_PATH);
+    } else {
+      const settingsTab: FileTab = {
+        name: "Settings",
+        path: SETTINGS_PATH,
+        isDir: false,
+        category: "settings",
+      };
+      setTabs((prev) => [...prev, settingsTab]);
+      setActivePath(SETTINGS_PATH);
+    }
+  }
+
   return (
     <div className='w-full h-screen flex flex-col bg-app-surface overflow-hidden select-none'>
       <Header
-        recent={tab.activeFile?.name || workspaceRoot?.name || ""}
-        hasUnsavedChanges={tab.activeFile ? tab.isDirty(tab.activeFile.path) : false}
         onRequestQuit={requestQuit}
         terminalOpen={terminalOpen}
         setTerminalOpen={setTerminalOpen}
@@ -184,6 +198,7 @@ export default function Home() {
         tabs={tabs}
         paletteOpen={paletteOpen}
         setPaletteOpen={setPaletteOpen}
+        onOpenSettingsTab={openSettingsTab}
       />
 
       <div className='flex-1 w-full flex min-h-0'>
@@ -202,6 +217,7 @@ export default function Home() {
           openPathByString={openPathByString}
           settings={settings}
           onSettingsChange={updateSettings}
+          onOpenSettingsTab={openSettingsTab}
         />
 
         <EditorArea
@@ -210,6 +226,7 @@ export default function Home() {
           setActivePath={setActivePath}
           language={language}
           settings={settings}
+          onSettingsChange={updateSettings}
           cursor={cursor}
           setCursor={setCursor}
           activeFile={tab.activeFile}
