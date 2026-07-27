@@ -1,26 +1,25 @@
-// terminal.go — Native shell process manager for MervCode's integrated terminal.
-// Spawns the user's default shell via os/exec (no CGO, no external deps).
-// Streams I/O through Wails events. Each session is identified by a unique ID
-// and cleaned up on app shutdown via KillAllTerminals().
+// terminal.go — Native PTY-based shell manager for MervCode's integrated terminal.
+// Uses github.com/creack/pty for proper pseudo-terminal support (no CGO).
+// Enables: Ctrl+C (SIGINT), arrow keys, vim/nano/htop, job control, etc.
 
 package main
 
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"runtime"
 
+	"github.com/creack/pty"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// TerminalSession represents a single running shell process
+// TerminalSession represents a running shell with a PTY
 type TerminalSession struct {
 	ID     string
 	cmd    *exec.Cmd
-	stdin  io.WriteCloser
+	pty    *os.File
 	cancel context.CancelFunc
 }
 
@@ -44,8 +43,7 @@ func DetectShell() string {
 	return "bash"
 }
 
-// CreateTerminal spawns a new shell session and streams output via Wails events.
-// If shell is empty, the user's default shell is auto-detected.
+// CreateTerminal spawns a new shell with a proper PTY.
 func (a *App) CreateTerminal(id string, workingDir string, shell string) error {
 	a.terminalMu.Lock()
 	defer a.terminalMu.Unlock()
@@ -57,6 +55,7 @@ func (a *App) CreateTerminal(id string, workingDir string, shell string) error {
 	if shell == "" {
 		shell = DetectShell()
 	}
+
 	ctx, cancel := context.WithCancel(a.ctx)
 
 	var cmd *exec.Cmd
@@ -70,35 +69,20 @@ func (a *App) CreateTerminal(id string, workingDir string, shell string) error {
 		cmd.Dir = workingDir
 	}
 
-	cmd.Env = os.Environ()
+	env := os.Environ()
+	env = append(env, "TERM=xterm-256color")
+	cmd.Env = env
 
-	stdinPipe, err := cmd.StdinPipe()
+	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		cancel()
-		return fmt.Errorf("stdin pipe: %w", err)
-	}
-
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		cancel()
-		return fmt.Errorf("stdout pipe: %w", err)
-	}
-
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		cancel()
-		return fmt.Errorf("stderr pipe: %w", err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		cancel()
-		return fmt.Errorf("start shell %s: %w", shell, err)
+		return fmt.Errorf("start pty: %w", err)
 	}
 
 	session := &TerminalSession{
 		ID:     id,
 		cmd:    cmd,
-		stdin:  stdinPipe,
+		pty:    ptmx,
 		cancel: cancel,
 	}
 	a.terminals[id] = session
@@ -106,20 +90,7 @@ func (a *App) CreateTerminal(id string, workingDir string, shell string) error {
 	go func() {
 		buf := make([]byte, 8192)
 		for {
-			n, err := stdoutPipe.Read(buf)
-			if n > 0 {
-				wailsRuntime.EventsEmit(a.ctx, "terminal:output:"+id, string(buf[:n]))
-			}
-			if err != nil {
-				break
-			}
-		}
-	}()
-
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := stderrPipe.Read(buf)
+			n, err := ptmx.Read(buf)
 			if n > 0 {
 				wailsRuntime.EventsEmit(a.ctx, "terminal:output:"+id, string(buf[:n]))
 			}
@@ -133,14 +104,19 @@ func (a *App) CreateTerminal(id string, workingDir string, shell string) error {
 		_ = cmd.Wait()
 		wailsRuntime.EventsEmit(a.ctx, "terminal:exit:"+id, nil)
 		a.terminalMu.Lock()
-		delete(a.terminals, id)
+		if s, ok := a.terminals[id]; ok {
+			if s.pty != nil {
+				s.pty.Close()
+			}
+			delete(a.terminals, id)
+		}
 		a.terminalMu.Unlock()
 	}()
 
 	return nil
 }
 
-// WriteTerminal sends user input to the shell's stdin.
+// WriteTerminal sends user input to the PTY.
 func (a *App) WriteTerminal(id string, data string) error {
 	a.terminalMu.Lock()
 	session, exists := a.terminals[id]
@@ -150,13 +126,24 @@ func (a *App) WriteTerminal(id string, data string) error {
 		return fmt.Errorf("terminal session %s not found", id)
 	}
 
-	_, err := session.stdin.Write([]byte(data))
+	_, err := session.pty.Write([]byte(data))
 	return err
 }
 
-// ResizeTerminal is a no-op placeholder for future PTY support.
+// ResizeTerminal updates the PTY window size for proper rendering of interactive programs.
 func (a *App) ResizeTerminal(id string, cols, rows int) error {
-	return nil
+	a.terminalMu.Lock()
+	session, exists := a.terminals[id]
+	a.terminalMu.Unlock()
+
+	if !exists {
+		return fmt.Errorf("terminal session %s not found", id)
+	}
+
+	return pty.Setsize(session.pty, &pty.Winsize{
+		Rows: uint16(rows),
+		Cols: uint16(cols),
+	})
 }
 
 // KillTerminal forcefully terminates a shell session.
@@ -171,6 +158,9 @@ func (a *App) KillTerminal(id string) error {
 	a.terminalMu.Unlock()
 
 	session.cancel()
+	if session.pty != nil {
+		_ = session.pty.Close()
+	}
 	if session.cmd.Process != nil {
 		_ = session.cmd.Process.Kill()
 	}
@@ -184,6 +174,9 @@ func (a *App) KillAllTerminals() {
 
 	for id, session := range a.terminals {
 		session.cancel()
+		if session.pty != nil {
+			_ = session.pty.Close()
+		}
 		if session.cmd.Process != nil {
 			_ = session.cmd.Process.Kill()
 		}
@@ -212,7 +205,6 @@ func (a *App) ListAvailableShells() []string {
 			}
 		}
 		if shell := os.Getenv("SHELL"); shell != "" {
-			// Ensure the $SHELL value is included (may use full path)
 			found := false
 			for _, s := range shells {
 				if s == shell {

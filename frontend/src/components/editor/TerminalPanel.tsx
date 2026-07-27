@@ -4,11 +4,14 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { ClipboardAddon } from "@xterm/addon-clipboard";
+import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import {
   CreateTerminal,
   WriteTerminal,
   KillTerminal,
+  ResizeTerminal,
   ListAvailableShells,
 } from "../../../wailsjs/go/main/App";
 import { EventsOn, EventsOff } from "../../../wailsjs/runtime/runtime";
@@ -98,37 +101,26 @@ export default function TerminalPanel({ onClose, workingDir, settings }: Termina
         scrollback: 5000,
         convertEol: true,
         allowProposedApi: true,
-      });
-
-      term.attachCustomKeyEventHandler((e) => {
-        if (e.type !== "keydown") return true;
-
-        if (e.ctrlKey && e.key === "c") {
-          if (term.hasSelection()) {
-            document.execCommand("copy");
-            return false;
-          }
-          return true;
-        }
-
-        if (e.ctrlKey && e.key === "v") {
-          navigator.clipboard.readText().then((text) => {
-            term.paste(text);
-          }).catch(() => {});
-          return false;
-        }
-
-        return true;
+        macOptionIsMeta: true,
+        windowsMode: navigator.platform.includes("Win"),
       });
 
       const fitAddon = new FitAddon();
       const webLinksAddon = new WebLinksAddon();
       const unicode11 = new Unicode11Addon();
+      const clipboardAddon = new ClipboardAddon();
+      const webglAddon = new WebglAddon();
 
       term.loadAddon(fitAddon);
       term.loadAddon(webLinksAddon);
       term.loadAddon(unicode11);
+      term.loadAddon(clipboardAddon);
+      term.loadAddon(webglAddon);
       term.unicode.activeVersion = "11";
+
+      webglAddon.onContextLoss(() => {
+        webglAddon.dispose();
+      });
 
       term.open(el);
       fitAddon.fit();
@@ -136,13 +128,19 @@ export default function TerminalPanel({ onClose, workingDir, settings }: Termina
       termInstances.current.set(id, term);
       fitAddons.current.set(id, fitAddon);
 
-      term.onData((data) => {
-        WriteTerminal(id, data);
-      });
+      CreateTerminal(id, workingDir || "", shell)
+        .then(() => {
+          term.onData((data) => {
+            WriteTerminal(id, data);
+          });
 
-      CreateTerminal(id, workingDir || "", shell).catch((err) => {
-        term.write(`\r\n\x1b[31mFailed to start shell: ${err}\x1b[0m\r\n`);
-      });
+          term.onResize(({ cols, rows }) => {
+            ResizeTerminal(id, cols, rows);
+          });
+        })
+        .catch((err) => {
+          term.write(`\r\n\x1b[31mFailed to start shell: ${err}\x1b[0m\r\n`);
+        });
 
       EventsOn(`terminal:output:${id}`, (data: string) => {
         term.write(data);
@@ -249,7 +247,7 @@ export default function TerminalPanel({ onClose, workingDir, settings }: Termina
         const term = activeTermId ? termInstances.current.get(activeTermId) : undefined;
         if (term?.hasSelection()) {
           e.preventDefault();
-          document.execCommand("copy");
+          navigator.clipboard.writeText(term.getSelection());
         }
         return;
       }
@@ -257,7 +255,9 @@ export default function TerminalPanel({ onClose, workingDir, settings }: Termina
         e.preventDefault();
         navigator.clipboard.readText().then((text) => {
           const term = activeTermId ? termInstances.current.get(activeTermId) : undefined;
-          term?.paste(text);
+          if (term && text) {
+            term.paste(text);
+          }
         }).catch(() => {});
         return;
       }

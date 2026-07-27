@@ -259,3 +259,7 @@ body {
 .xterm-cursor-layer {
   z-index: 10;
 }
+
+.xterm-screen {
+  height: 100% !important;
+}
