@@ -180,6 +180,9 @@ export interface EditorSettings {
   fastScrollSensitivity: number;
   padding: { top: number; bottom: number };
 
+  // ── Terminal ──
+  defaultShell: string;
+
   // ── Advanced ──
   maxTokenizationLineLength: number;
   largeFileOptimizations: boolean;

@@ -166,7 +166,11 @@ export default function EditorArea({
         <AnimatePresence>
           {terminalOpen && (
             <ErrorBoundary label='Terminal'>
-              <TerminalPanel onClose={() => setTerminalOpen(false)} />
+              <TerminalPanel
+                onClose={() => setTerminalOpen(false)}
+                workingDir={activeFile ? activeFile.path.replace(/[\\/][^\\/]+$/, "") : undefined}
+                settings={settings}
+              />
             </ErrorBoundary>
           )}
         </AnimatePresence>

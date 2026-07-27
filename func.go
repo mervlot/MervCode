@@ -31,18 +31,17 @@ type App struct {
 
 	lspMu      sync.Mutex
 	lspClients map[string]*lspClient
-	// lspRoots caches the resolved project root per (language, containing
-	// directory) — e.g. the directory containing the closest tsconfig.json
-	// for a TypeScript file, or the closest go.mod for a Go file — so each
-	// file resolves to its own nearest project, correctly distinguishing
-	// multiple same-language projects living under one workspace.
-	lspRoots map[string]string
+	lspRoots   map[string]string
+
+	terminalMu sync.Mutex
+	terminals  map[string]*TerminalSession
 }
 
 func NewApp() *App {
 	return &App{
 		lspClients: make(map[string]*lspClient),
 		lspRoots:   make(map[string]string),
+		terminals:  make(map[string]*TerminalSession),
 	}
 }
 

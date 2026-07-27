@@ -117,7 +117,7 @@ export default function Home() {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activePath, tabs]);
+  }, [activePath, tabs, setTerminalOpen]);
 
   // Listen for backend toolchain events
   useEffect(() => {

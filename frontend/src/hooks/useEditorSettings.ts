@@ -128,6 +128,8 @@ const defaults: EditorSettings = {
   fastScrollSensitivity: 5,
   padding: { top: 0, bottom: 0 },
 
+  defaultShell: "",
+
   maxTokenizationLineLength: 20000,
   largeFileOptimizations: true,
   experimentalWhitespaceRendering: "svg",
