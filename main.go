@@ -36,9 +36,10 @@ func main() {
 		// Connects Wails context setup to your App instance
 		OnStartup: app.Startup,
 
-		// Safely tears down file system watchers on application exit
+		// Safely tears down file system watchers and terminal sessions on exit
 		OnShutdown: func(ctx context.Context) {
 			app.StopWatcher()
+			app.KillAllTerminals()
 		},    
 
 		Bind: []interface{}{

@@ -3,7 +3,7 @@ import * as monaco from "monaco-editor";
 
 import { setupMonaco } from "../editor/monaco/setup";
 import { applyLanguageFeatures } from "../editor/monaco/apply";
-import { toMonacoOptions } from "../editor/monaco/toMonacoOptions";
+import { toMonacoOptions, toModelOptions } from "../editor/monaco/toMonacoOptions";
 import { getCustomActions } from "../editor/keybinding";
 import { useTheme } from "../contexts/ThemeContext";
 import type { EditorSettings } from "../types";

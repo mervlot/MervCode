@@ -6,6 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { SearchAddon } from "@xterm/addon-search";
 import "@xterm/xterm/css/xterm.css";
 import {
   CreateTerminal,
@@ -38,12 +39,16 @@ export default function TerminalPanel({ visible, onClose, workingDir, settings }
   const [activePanelTab, setActivePanelTab] = useState("TERMINAL");
   const [shellDropdownOpen, setShellDropdownOpen] = useState(false);
   const [availableShells, setAvailableShells] = useState<string[]>([]);
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const containersRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const panelRef = useRef<HTMLDivElement>(null);
   const termInstances = useRef<Map<string, Terminal>>(new Map());
   const fitAddons = useRef<Map<string, FitAddon>>(new Map());
+  const searchAddons = useRef<Map<string, SearchAddon>>(new Map());
   const initialized = useRef(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     ListAvailableShells().then(setAvailableShells).catch(() => {});
@@ -59,6 +64,118 @@ export default function TerminalPanel({ visible, onClose, workingDir, settings }
     return () => document.removeEventListener("mousedown", handleClick);
   }, [shellDropdownOpen]);
 
+  const initTerminalInstance = useCallback((id: string, shell: string) => {
+    const container = containersRef.current.get(id);
+    if (!container) {
+      console.warn(`[MervCode] Terminal container #${id} not found in DOM — will retry`);
+      return false;
+    }
+
+    console.log(`[MervCode] Initializing terminal #${id} with shell="${shell}"`);
+
+    const term = new Terminal({
+      theme: {
+        background: "#000000",
+        foreground: "#d4d4d4",
+        cursor: "#DC143C",
+        cursorAccent: "#000000",
+        selectionBackground: "#DC143C44",
+        selectionForeground: "#ffffff",
+        black: "#000000",
+        red: "#DC143C",
+        green: "#4EC9B0",
+        yellow: "#DCDCAA",
+        blue: "#569CD6",
+        magenta: "#C586C0",
+        cyan: "#9CDCFE",
+        white: "#d4d4d4",
+      },
+      fontFamily: "'Monaspace Argon', 'Cascadia Code', 'Fira Code', monospace",
+      fontSize: 13,
+      lineHeight: 1.3,
+      cursorBlink: true,
+      cursorStyle: "block",
+      scrollback: 5000,
+      convertEol: true,
+      allowProposedApi: true,
+      macOptionIsMeta: true,
+      windowsMode:
+        navigator.platform.toLowerCase().includes("win") ||
+        navigator.userAgent.toLowerCase().includes("windows"),
+    });
+
+    const fitAddon = new FitAddon();
+    const webLinksAddon = new WebLinksAddon();
+    const unicode11 = new Unicode11Addon();
+    const clipboardAddon = new ClipboardAddon();
+    const searchAddon = new SearchAddon();
+
+    term.loadAddon(fitAddon);
+    term.loadAddon(webLinksAddon);
+    term.loadAddon(unicode11);
+    term.loadAddon(clipboardAddon);
+    term.loadAddon(searchAddon);
+    term.unicode.activeVersion = "11";
+
+    term.open(container);
+
+    // Fit AFTER open so the terminal measures the actual container size
+    fitAddon.fit();
+    console.log(`[MervCode] Terminal #${id} opened and fitted`);
+
+    // WebGL must be loaded AFTER term.open() to avoid
+    // "task queue exceeded" deadline errors from xterm's
+    // internal renderer scheduling.
+    try {
+      const webglAddon = new WebglAddon();
+      webglAddon.onContextLoss(() => {
+        console.warn(`[MervCode] WebGL context lost for #${id}, disposing`);
+        webglAddon.dispose();
+      });
+      term.loadAddon(webglAddon);
+      console.log(`[MervCode] WebGL renderer enabled for #${id}`);
+    } catch {
+      console.warn(`[MervCode] WebGL unavailable for #${id}, using canvas renderer`);
+    }
+
+    termInstances.current.set(id, term);
+    fitAddons.current.set(id, fitAddon);
+    searchAddons.current.set(id, searchAddon);
+
+    // Register event listeners BEFORE calling CreateTerminal to avoid
+    // missing the first output or a fast exit
+    EventsOn(`terminal:output:${id}`, (data: string) => {
+      if (data) {
+        console.log(`[MervCode] terminal:output #${id} (${data.length} bytes)`);
+        term.write(data);
+      }
+    });
+
+    EventsOn(`terminal:exit:${id}`, () => {
+      console.log(`[MervCode] terminal:exit #${id}`);
+      term.write("\r\n\x1b[90m[Process exited]\x1b[0m\r\n");
+    });
+
+    console.log(`[MervCode] Calling CreateTerminal(#${id}, ...)`);
+    CreateTerminal(id, workingDir || "", shell)
+      .then(() => {
+        console.log(`[MervCode] CreateTerminal #${id} succeeded`);
+        term.onData((data) => {
+          WriteTerminal(id, data);
+        });
+        term.onResize(({ cols, rows }) => {
+          ResizeTerminal(id, cols, rows);
+        });
+        term.focus();
+      })
+      .catch((err) => {
+        console.error(`[MervCode] CreateTerminal #${id} failed:`, err);
+        term.write(`\r\n\x1b[31mFailed to start shell: ${err}\x1b[0m\r\n`);
+      });
+
+    return true;
+  }, [workingDir]);
+
   const createNewTerminal = useCallback((shellOverride?: string) => {
     const id = `term-${++terminalCounter}`;
     const shell = shellOverride ?? settings.defaultShell;
@@ -69,100 +186,31 @@ export default function TerminalPanel({ visible, onClose, workingDir, settings }
         ? name
         : "pwsh";
 
+    console.log(`[MervCode] Creating new terminal tab #${id} shell="${shell}" label="${label}"`);
+
     setTermTabs((prev) => [...prev, { id, label, shell }]);
     setActiveTermId(id);
     setActivePanelTab("TERMINAL");
 
-    requestAnimationFrame(() => {
-      const el = containersRef.current.get(id);
-      if (!el) return;
+    // Use requestAnimationFrame + retry loop to wait for the DOM container
+    // to be committed by React before trying to init the xterm instance.
+    let retries = 0;
+    const maxRetries = 20;
 
-      const term = new Terminal({
-        theme: {
-          background: "#000000",
-          foreground: "#d4d4d4",
-          cursor: "#DC143C",
-          cursorAccent: "#000000",
-          selectionBackground: "#DC143C44",
-          selectionForeground: "#ffffff",
-          black: "#000000",
-          red: "#DC143C",
-          green: "#4EC9B0",
-          yellow: "#DCDCAA",
-          blue: "#569CD6",
-          magenta: "#C586C0",
-          cyan: "#9CDCFE",
-          white: "#d4d4d4",
-        },
-        fontFamily: "'Monaspace Argon', 'Cascadia Code', 'Fira Code', monospace",
-        fontSize: 13,
-        lineHeight: 1.3,
-        cursorBlink: true,
-        cursorStyle: "block",
-        scrollback: 5000,
-        convertEol: true,
-        allowProposedApi: true,
-        macOptionIsMeta: true,
-        windowsMode:
-          navigator.platform.toLowerCase().includes("win") ||
-          navigator.userAgent.toLowerCase().includes("windows"),
-      });
-
-      const fitAddon = new FitAddon();
-      const webLinksAddon = new WebLinksAddon();
-      const unicode11 = new Unicode11Addon();
-      const clipboardAddon = new ClipboardAddon();
-
-      term.loadAddon(fitAddon);
-      term.loadAddon(webLinksAddon);
-      term.loadAddon(unicode11);
-      term.loadAddon(clipboardAddon);
-      term.unicode.activeVersion = "11";
-
-      // WebGL rendering can fail in restricted/GPU-less environments
-      // (common inside WebView2). Fall back to xterm's default renderer
-      // instead of letting the whole terminal fail to initialize.
-      try {
-        const webglAddon = new WebglAddon();
-        webglAddon.onContextLoss(() => {
-          webglAddon.dispose();
-        });
-        term.loadAddon(webglAddon);
-      } catch (err) {
-        console.warn("[MervCode] WebGL terminal renderer unavailable, using default renderer:", err);
+    function tryInit() {
+      const ok = initTerminalInstance(id, shell);
+      if (!ok) {
+        retries++;
+        if (retries < maxRetries) {
+          requestAnimationFrame(tryInit);
+        } else {
+          console.error(`[MervCode] Giving up on terminal #${id} after ${maxRetries} retries — container never appeared`);
+        }
       }
+    }
 
-      term.open(el);
-      fitAddon.fit();
-
-      termInstances.current.set(id, term);
-      fitAddons.current.set(id, fitAddon);
-
-      CreateTerminal(id, workingDir || "", shell)
-        .then(() => {
-          term.onData((data) => {
-            WriteTerminal(id, data);
-          });
-
-          term.onResize(({ cols, rows }) => {
-            ResizeTerminal(id, cols, rows);
-          });
-        })
-        .catch((err) => {
-          term.write(`\r\n\x1b[31mFailed to start shell: ${err}\x1b[0m\r\n`);
-        });
-
-      EventsOn(`terminal:output:${id}`, (data: string) => {
-        term.write(data);
-      });
-
-      EventsOn(`terminal:exit:${id}`, () => {
-        term.write("\r\n\x1b[90m[Process exited]\x1b[0m\r\n");
-      });
-
-      term.focus();
-    });
-  }, [workingDir, settings.defaultShell]);
+    requestAnimationFrame(tryInit);
+  }, [settings.defaultShell, initTerminalInstance]);
 
   useEffect(() => {
     if (!initialized.current) {
@@ -202,6 +250,52 @@ export default function TerminalPanel({ visible, onClose, workingDir, settings }
     return () => clearTimeout(t);
   }, [visible, activeTermId]);
 
+  const toggleSearch = useCallback(() => {
+    setSearchVisible((v) => {
+      if (!v) {
+        // Opening search — focus input on next render
+        requestAnimationFrame(() => searchInputRef.current?.focus());
+      } else {
+        setSearchQuery("");
+      }
+      return !v;
+    });
+  }, []);
+
+  const closeSearch = useCallback(() => {
+    setSearchVisible(false);
+    setSearchQuery("");
+    const term = activeTermId ? termInstances.current.get(activeTermId) : undefined;
+    term?.focus();
+  }, [activeTermId]);
+
+  const handleSearchInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    const searchAddon = activeTermId ? searchAddons.current.get(activeTermId) : undefined;
+    if (searchAddon) {
+      if (value) {
+        searchAddon.findOptions.caseSensitive = false;
+        searchAddon.findOptions.regex = false;
+        searchAddon.findOptions.wholeWord = false;
+        searchAddon.findNext(value, { incremental: true });
+      } else {
+        searchAddon.clearActiveMarker();
+      }
+    }
+  }, [activeTermId]);
+
+  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    const searchAddon = activeTermId ? searchAddons.current.get(activeTermId) : undefined;
+    if (!searchAddon || !searchQuery) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      searchAddon.findNext(searchQuery, { incremental: false });
+    } else if (e.key === "Escape") {
+      closeSearch();
+    }
+  }, [activeTermId, searchQuery, closeSearch]);
+
   const closeTerminal = useCallback((id: string) => {
     KillTerminal(id);
     EventsOff(`terminal:output:${id}`);
@@ -211,6 +305,7 @@ export default function TerminalPanel({ visible, onClose, workingDir, settings }
     term?.dispose();
     termInstances.current.delete(id);
     fitAddons.current.delete(id);
+    searchAddons.current.delete(id);
 
     setTermTabs((prev) => {
       const next = prev.filter((t) => t.id !== id);
@@ -233,6 +328,7 @@ export default function TerminalPanel({ visible, onClose, workingDir, settings }
       });
       termInstances.current.clear();
       fitAddons.current.clear();
+      searchAddons.current.clear();
     };
   }, []);
 
@@ -270,6 +366,11 @@ export default function TerminalPanel({ visible, onClose, workingDir, settings }
         }
         return;
       }
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        toggleSearch();
+        return;
+      }
       if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
         navigator.clipboard.readText().then((text) => {
@@ -284,7 +385,7 @@ export default function TerminalPanel({ visible, onClose, workingDir, settings }
 
     el.addEventListener("keydown", onKeyDown);
     return () => el.removeEventListener("keydown", onKeyDown);
-  }, [activeTermId, termTabs, closeTerminal]);
+  }, [activeTermId, termTabs, closeTerminal, toggleSearch]);
 
   function handleShellPick(shell: string) {
     setShellDropdownOpen(false);
@@ -392,6 +493,15 @@ export default function TerminalPanel({ visible, onClose, workingDir, settings }
           )}
 
           <button
+            onClick={toggleSearch}
+            className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+              searchVisible ? "text-accent" : "text-faint hover:text-secondary"
+            }`}
+            title='Search (Ctrl+Shift+F)'
+          >
+            <i className='bi bi-search text-[11px]' />
+          </button>
+          <button
             onClick={onClose}
             className='w-6 h-6 flex items-center justify-center hover:text-secondary rounded transition-colors text-faint'
           >
@@ -418,6 +528,52 @@ export default function TerminalPanel({ visible, onClose, workingDir, settings }
         ) : (
           <div className='h-full flex items-center justify-center text-faint text-[11px]'>
             No output
+          </div>
+        )}
+
+        {/* Zed-like terminal search bar */}
+        {searchVisible && (
+          <div
+            className='absolute top-0 right-0 flex items-center gap-1.5 px-2 py-1 m-2 rounded-lg border border-white/12 bg-[#141414] shadow-app z-10'
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <i className='bi bi-search text-[10px] text-faint' />
+            <input
+              ref={searchInputRef}
+              type='text'
+              value={searchQuery}
+              onChange={handleSearchInput}
+              onKeyDown={handleSearchKeyDown}
+              placeholder='Find…'
+              className='w-36 bg-transparent outline-none text-[12px] text-primary placeholder:text-tertiary'
+            />
+            <button
+              onClick={() => {
+                const sa = activeTermId ? searchAddons.current.get(activeTermId) : undefined;
+                if (sa && searchQuery) sa.findPrevious(searchQuery);
+              }}
+              className='text-faint hover:text-secondary transition-colors'
+              title='Previous match'
+            >
+              <i className='bi bi-chevron-up text-[9px]' />
+            </button>
+            <button
+              onClick={() => {
+                const sa = activeTermId ? searchAddons.current.get(activeTermId) : undefined;
+                if (sa && searchQuery) sa.findNext(searchQuery);
+              }}
+              className='text-faint hover:text-secondary transition-colors'
+              title='Next match'
+            >
+              <i className='bi bi-chevron-down text-[9px]' />
+            </button>
+            <button
+              onClick={closeSearch}
+              className='text-faint hover:text-secondary transition-colors ml-1'
+              title='Close search'
+            >
+              <i className='bi bi-x text-[12px]' />
+            </button>
           </div>
         )}
       </div>

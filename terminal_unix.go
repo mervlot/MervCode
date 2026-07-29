@@ -3,6 +3,7 @@
 package main
 
 import (
+	"log"
 	"os"
 	"os/exec"
 
@@ -22,6 +23,7 @@ func (p *unixPty) Resize(cols, rows uint16) error {
 }
 
 func startShell(shell, workingDir string, env []string) (ptyHandle, *os.Process, error) {
+	log.Printf("[MervCode] startShell (unix): shell=%q workingDir=%q", shell, workingDir)
 	cmd := exec.Command(shell, "-l")
 	if workingDir != "" {
 		cmd.Dir = workingDir
@@ -30,8 +32,9 @@ func startShell(shell, workingDir string, env []string) (ptyHandle, *os.Process,
 
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
+		log.Printf("[MervCode] startShell (unix): pty.Start FAILED: %v", err)
 		return nil, nil, err
 	}
-
+	log.Printf("[MervCode] startShell (unix): OK (pid=%d)", cmd.Process.Pid)
 	return &unixPty{f: ptmx}, cmd.Process, nil
 }

@@ -11,6 +11,28 @@ import type { EditorSettings } from "../../types";
  * so every control in the Settings panel actually affects the editor
  * instead of just being stored.
  */
+/**
+ * Extracts model-level update options (tabSize, insertSpaces, etc.) from
+ * EditorSettings for ITextModel.updateOptions(). This is called separately
+ * from toMonacoOptions because ITextModel accepts a narrower options type
+ * than IStandaloneCodeEditor.
+ */
+export function toModelOptions(
+  settings: EditorSettings,
+): monaco.editor.ITextModelUpdateOptions {
+  return {
+    tabSize: settings.tabSize,
+    insertSpaces: settings.insertSpaces,
+    trimAutoWhitespace: settings.trimAutoWhitespace,
+    indentSize: settings.tabSize,
+    bracketColorizationOptions: {
+      enabled: settings.bracketPairColorization.enabled,
+      independentColorPoolPerBracketType:
+        settings.bracketPairColorization.independentColorPoolPerBracketType,
+    },
+  };
+}
+
 export function toMonacoOptions(
   settings: EditorSettings,
 ): monaco.editor.IEditorOptions & monaco.editor.IGlobalEditorOptions {
