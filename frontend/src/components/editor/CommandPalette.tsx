@@ -73,7 +73,7 @@ export default function CommandPalette({
 
   return (
     <div className='fixed inset-0 z-50' onClick={onClose}>
-      <div className='mx-auto mt-[10vh] w-full max-w-[520px]'>
+      <div className='mx-auto mt-[10vh] w-full max-w-130'>
         <div
           onClick={(e) => e.stopPropagation()}
           className='rounded-lg border border-subtle-strong bg-surface shadow-app overflow-hidden'

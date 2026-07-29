@@ -272,7 +272,7 @@ export default function TerminalPanel({ onClose, workingDir, settings }: Termina
     createNewTerminal(shell);
   }
 
-  const PANEL_TABS = ["PROBLEMS", "OUTPUT", "TERMINAL", "DEBUG CONSOLE"];
+  const PANEL_TABS = [ "TERMINAL"];
 
   return (
     <motion.div

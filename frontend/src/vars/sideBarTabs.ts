@@ -1,5 +1,3 @@
-
-
 const tabs = [
   {
     id: "explorer",
@@ -17,9 +15,9 @@ const tabs = [
     label: "Source Control",
   },
   {
-    id: "extensions",
-    iconClass: "bi bi-puzzle",
-    label: "Extensions",
+    id: "devices",
+    iconClass: "bi bi-android",
+    label: "Source Control",
   },
 ];
 export default tabs;

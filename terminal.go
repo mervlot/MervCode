@@ -1,26 +1,28 @@
-// terminal.go — Native PTY-based shell manager for MervCode's integrated terminal.
-// Uses github.com/creack/pty for proper pseudo-terminal support (no CGO).
-// Enables: Ctrl+C (SIGINT), arrow keys, vim/nano/htop, job control, etc.
-
 package main
 
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
 
-	"github.com/creack/pty"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// TerminalSession represents a running shell with a PTY
+// ptyHandle abstracts platform-specific PTY operations.
+type ptyHandle interface {
+	io.ReadWriteCloser
+	Resize(cols, rows uint16) error
+}
+
+// TerminalSession represents a running shell.
 type TerminalSession struct {
-	ID     string
-	cmd    *exec.Cmd
-	pty    *os.File
-	cancel context.CancelFunc
+	ID      string
+	pty     ptyHandle
+	process *os.Process
+	cancel  context.CancelFunc
 }
 
 // DetectShell returns the user's default shell for the current OS.
@@ -44,6 +46,7 @@ func DetectShell() string {
 }
 
 // CreateTerminal spawns a new shell with a proper PTY.
+// startShell is implemented per platform (terminal_unix.go / terminal_windows.go).
 func (a *App) CreateTerminal(id string, workingDir string, shell string) error {
 	a.terminalMu.Lock()
 	defer a.terminalMu.Unlock()
@@ -56,52 +59,55 @@ func (a *App) CreateTerminal(id string, workingDir string, shell string) error {
 		shell = DetectShell()
 	}
 
+	// Resolve to full path so Windows CreateProcess can find it.
+	if full, err := exec.LookPath(shell); err == nil {
+		shell = full
+	}
+
 	ctx, cancel := context.WithCancel(a.ctx)
-
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, shell)
-	} else {
-		cmd = exec.CommandContext(ctx, shell, "-l")
-	}
-
-	if workingDir != "" {
-		cmd.Dir = workingDir
-	}
 
 	env := os.Environ()
 	env = append(env, "TERM=xterm-256color")
-	cmd.Env = env
 
-	ptmx, err := pty.Start(cmd)
+	h, process, err := startShell(shell, workingDir, env)
 	if err != nil {
 		cancel()
-		return fmt.Errorf("start pty: %w", err)
+		return fmt.Errorf("start shell: %w", err)
 	}
 
 	session := &TerminalSession{
-		ID:     id,
-		cmd:    cmd,
-		pty:    ptmx,
-		cancel: cancel,
+		ID:      id,
+		pty:     h,
+		process: process,
+		cancel:  cancel,
 	}
 	a.terminals[id] = session
 
+	// Read PTY output and emit to frontend.
 	go func() {
 		buf := make([]byte, 8192)
 		for {
-			n, err := ptmx.Read(buf)
+			n, readErr := h.Read(buf)
 			if n > 0 {
 				wailsRuntime.EventsEmit(a.ctx, "terminal:output:"+id, string(buf[:n]))
 			}
-			if err != nil {
+			if readErr != nil {
 				break
 			}
 		}
 	}()
 
+	// Kill process on context cancellation.
 	go func() {
-		_ = cmd.Wait()
+		<-ctx.Done()
+		if process != nil {
+			_ = process.Kill()
+		}
+	}()
+
+	// Wait for process exit, then clean up.
+	go func() {
+		_, _ = process.Wait()
 		wailsRuntime.EventsEmit(a.ctx, "terminal:exit:"+id, nil)
 		a.terminalMu.Lock()
 		if s, ok := a.terminals[id]; ok {
@@ -130,7 +136,7 @@ func (a *App) WriteTerminal(id string, data string) error {
 	return err
 }
 
-// ResizeTerminal updates the PTY window size for proper rendering of interactive programs.
+// ResizeTerminal updates the PTY window size.
 func (a *App) ResizeTerminal(id string, cols, rows int) error {
 	a.terminalMu.Lock()
 	session, exists := a.terminals[id]
@@ -140,10 +146,7 @@ func (a *App) ResizeTerminal(id string, cols, rows int) error {
 		return fmt.Errorf("terminal session %s not found", id)
 	}
 
-	return pty.Setsize(session.pty, &pty.Winsize{
-		Rows: uint16(rows),
-		Cols: uint16(cols),
-	})
+	return session.pty.Resize(uint16(cols), uint16(rows))
 }
 
 // KillTerminal forcefully terminates a shell session.
@@ -161,8 +164,8 @@ func (a *App) KillTerminal(id string) error {
 	if session.pty != nil {
 		_ = session.pty.Close()
 	}
-	if session.cmd.Process != nil {
-		_ = session.cmd.Process.Kill()
+	if session.process != nil {
+		_ = session.process.Kill()
 	}
 	return nil
 }
@@ -172,16 +175,16 @@ func (a *App) KillAllTerminals() {
 	a.terminalMu.Lock()
 	defer a.terminalMu.Unlock()
 
-	for id, session := range a.terminals {
+	for _, session := range a.terminals {
 		session.cancel()
 		if session.pty != nil {
 			_ = session.pty.Close()
 		}
-		if session.cmd.Process != nil {
-			_ = session.cmd.Process.Kill()
+		if session.process != nil {
+			_ = session.process.Kill()
 		}
-		delete(a.terminals, id)
 	}
+	a.terminals = make(map[string]*TerminalSession)
 }
 
 // GetDefaultShell exposes the detected shell to the frontend.

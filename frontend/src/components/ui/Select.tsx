@@ -47,7 +47,7 @@ export default function Select({
       <div ref={ref} className='relative shrink-0'>
         <button
           onClick={() => setOpen(!open)}
-          className='flex items-center gap-2 px-3 py-1.5 min-w-[130px] text-sm text-primary bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg hover:border-[#DC143C]/40 transition-colors'
+          className='flex items-center gap-2 px-3 py-1.5 min-w-32.5 text-sm text-primary bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg hover:border-[#DC143C]/40 transition-colors'
         >
           <span className='flex-1 text-left'>{selected?.label ?? value}</span>
           <ChevronDown

@@ -17,12 +17,12 @@ export default function LeftBar({ activeTab, onTabChange, onOpenSettingsTab }: L
       <div className='w-full flex flex-col items-center gap-0.5'>
         <button
           title='Home'
-          className='w-9 h-9 flex items-center justify-center rounded text-secondary hover:text-primary hover:bg-hover transition-all mb-1'
+          className='w-5 h-6.7 flex items-center justify-center rounded text-secondary hover:text-primary hover:bg-hover transition-all mb-1'
         >
-          <i className='bi bi-house text-[15px]' />
+          <i className='bi  text-[15px]' />
         </button>
 
-        <div className='w-6 h-px bg-white/8 mb-1' />
+        <div className='w-full h-px mb-1' />
 
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -32,7 +32,7 @@ export default function LeftBar({ activeTab, onTabChange, onOpenSettingsTab }: L
               onClick={() => handleTabClick(tab.id)}
               title={tab.label}
               className={`
-                relative w-9 h-9 flex items-center justify-center rounded text-[15px]
+                relative w-9 h-9 flex my-6 items-center justify-center rounded text-[15px]
                 transition-all duration-100
                 ${
                   isActive

@@ -25,7 +25,9 @@ export default function Home() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(true);
-  const [workspaceRoot, setWorkspaceRoot] = useState<WorkspaceRoot | null>(null);
+  const [workspaceRoot, setWorkspaceRoot] = useState<WorkspaceRoot | null>(
+    null,
+  );
   const [paletteOpen, setPaletteOpen] = useState(false);
   const { settings, updateSettings } = useEditorSettings();
 
@@ -34,23 +36,35 @@ export default function Home() {
   const [activePath, setActivePath] = useState<string | null>(null);
   const [savedContent, setSavedContent] = useState<Record<string, string>>({});
   const [liveContent, setLiveContent] = useState<Record<string, string>>({});
-  const editorRefs = useRef<Record<string, monaco.editor.IStandaloneCodeEditor>>({});
+  const editorRefs = useRef<
+    Record<string, monaco.editor.IStandaloneCodeEditor>
+  >({});
 
   const tab = useTabManager({
-    tabs, setTabs,
-    activePath, setActivePath,
-    savedContent, liveContent,
-    setSavedContent, setLiveContent,
+    tabs,
+    setTabs,
+    activePath,
+    setActivePath,
+    savedContent,
+    liveContent,
+    setSavedContent,
+    setLiveContent,
     editorRefs,
     setActiveTab,
   });
 
-  const { openFile, openPathByString, saveActiveFile, saveByPath } = useFileOps({
-    tabs, setTabs,
-    activePath, setActivePath,
-    setSavedContent, setLiveContent,
-    liveContent, editorRefs,
-  });
+  const { openFile, openPathByString, saveActiveFile, saveByPath } = useFileOps(
+    {
+      tabs,
+      setTabs,
+      activePath,
+      setActivePath,
+      setSavedContent,
+      setLiveContent,
+      liveContent,
+      editorRefs,
+    },
+  );
 
   const language = useMemo(() => {
     if (!tab.activeFile) return "plaintext";
@@ -182,7 +196,7 @@ export default function Home() {
   }
 
   return (
-    <div className='w-full h-screen flex flex-col bg-app-surface overflow-hidden select-none'>
+    <div className="w-full h-screen flex flex-col bg-app-surface overflow-hidden select-none">
       <Header
         onRequestQuit={requestQuit}
         terminalOpen={terminalOpen}
@@ -199,9 +213,10 @@ export default function Home() {
         paletteOpen={paletteOpen}
         setPaletteOpen={setPaletteOpen}
         onOpenSettingsTab={openSettingsTab}
-      />
 
-      <div className='flex-1 w-full flex min-h-0'>
+        rootPath={workspaceRoot?.path}
+      />
+      <div className="flex-1 w-full flex min-h-0">
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}

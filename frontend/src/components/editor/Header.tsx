@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState,useCallback } from "react";
 import { Quit } from "../../../wailsjs/go/main/App";
 import CommandPalette, { type Command } from "./CommandPalette";
 import TopMenu from "./TopMenu";
 import { useTheme } from "../../contexts/ThemeContext";
 import type { FileTab } from "../../types";
-
+import { GitStatus } from "../../../wailsjs/go/main/App";
+import { GitBranchIcon } from "lucide-react";
 declare global {
   interface Window {
     runtime?: {
@@ -16,6 +17,17 @@ declare global {
   }
 }
 
+interface GitFileStatus {
+  path: string;
+  rel: string;
+  status: string;
+}
+
+interface GitStatusResult {
+  isRepo: boolean;
+  branch: string;
+  files: GitFileStatus[];
+}
 interface HeaderProps {
   onRequestQuit?: () => void;
   terminalOpen: boolean;
@@ -32,6 +44,7 @@ interface HeaderProps {
   paletteOpen: boolean;
   setPaletteOpen: React.Dispatch<React.SetStateAction<boolean>>;
   onOpenSettingsTab: () => void;
+  rootPath: string | undefined
 }
 
 export default function Header({
@@ -50,10 +63,12 @@ export default function Header({
   paletteOpen,
   setPaletteOpen,
   onOpenSettingsTab,
+  rootPath
 }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const [isMaximized, setIsMaximized] = useState(false);
-
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     window.runtime?.WindowIsMaximised?.().then((v) => {
       setIsMaximized(!!v);
@@ -181,7 +196,27 @@ export default function Header({
     if (onRequestQuit) onRequestQuit();
     else Quit();
   };
+  const [status, setStatus] = useState<GitStatusResult | null>(null);
+  const refresh = useCallback(async () => {
+    if (!rootPath) {
+      setStatus(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await GitStatus(rootPath);
+      setStatus(result);
+    } catch {
+      setError("Couldn't read git status.");
+    } finally {
+      setLoading(false);
+    }
+  }, [rootPath]);
 
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
   return (
     <header className='h-9 w-full bg-panel border-b border-subtle flex items-center select-none shrink-0'>
       <TopMenu
@@ -197,8 +232,11 @@ export default function Header({
         activePath={activePath}
         closeTab={closeTab}
       />
-      <div className='draggable flex-1 h-full flex items-center justify-center'>
-        <span className='text-[12px] font-semibold text-faint tracking-wide select-none'>MERVE CODE</span>
+      <div className='draggable flex-1 h-full flex items-center '>
+        <GitBranchIcon className="size-5 font-semibold text-faint tracking-wide select-none mr-2"></GitBranchIcon>
+        <span className='text-[12px] font-semibold text-faint tracking-wide select-none'>
+        {status?.branch }
+        </span>
       </div>
       <CommandPalette
         open={paletteOpen}
