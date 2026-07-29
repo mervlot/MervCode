@@ -370,6 +370,15 @@ func (a *App) InspectAndReadFile(path string) (*types.FileResponse, error) {
 		}, nil
 	}
 
+	// Binary files are never displayed, so skip reading (let alone
+	// base64-encoding) their content entirely — for a large binary (a
+	// compiled executable, an archive, etc.) doing that unconditionally
+	// was slow and pointless, and looked like the app was "stuck loading"
+	// a file it was actually just about to refuse to show.
+	if category == "binary" {
+		return &types.FileResponse{Category: category, Content: ""}, nil
+	}
+
 	// For media canvases (images, videos, audio, or PDFs), encode the full file to base64
 	fullBytes, err := os.ReadFile(path)
 	if err != nil {

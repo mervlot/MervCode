@@ -3,11 +3,52 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strings"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// findToolBinary resolves name to an executable path. It checks PATH
+// first (exec.LookPath), then falls back to common Go tool install
+// locations: $GOBIN, $GOPATH/bin, and ~/go/bin. GUI-launched apps
+// (especially on Windows/macOS when double-clicked rather than started
+// from a terminal) often inherit a shorter PATH than a shell session
+// would, so tools installed via `go install ...` — which land in one of
+// these directories — can appear "missing" even though they work fine
+// from a terminal.
+func findToolBinary(name string) (string, error) {
+	if p, err := exec.LookPath(name); err == nil {
+		return p, nil
+	}
+
+	exeName := name
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(exeName), ".exe") {
+		exeName += ".exe"
+	}
+
+	var candidates []string
+	if gobin := os.Getenv("GOBIN"); gobin != "" {
+		candidates = append(candidates, filepath.Join(gobin, exeName))
+	}
+	if gopath := os.Getenv("GOPATH"); gopath != "" {
+		candidates = append(candidates, filepath.Join(gopath, "bin", exeName))
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, "go", "bin", exeName))
+	}
+
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && !info.IsDir() {
+			return c, nil
+		}
+	}
+
+	return "", fmt.Errorf("%s not found in PATH or common Go bin directories", name)
+}
 
 type ToolStatus struct {
 	LanguageInstalled bool     `json:"languageInstalled"`
@@ -30,7 +71,7 @@ func (a *App) CheckLanguageTools(lang string) (*ToolStatus, error) {
 	// Check language runtime
 	if tc.RuntimeBinary != "" {
 		status.LanguageBinary = tc.RuntimeBinary
-		if _, err := exec.LookPath(tc.RuntimeBinary); err != nil {
+		if _, err := findToolBinary(tc.RuntimeBinary); err != nil {
 			status.LanguageInstalled = false
 			status.InstallCommand = installCommandFor(tc.RuntimeBinary)
 			return status, nil
@@ -40,14 +81,14 @@ func (a *App) CheckLanguageTools(lang string) (*ToolStatus, error) {
 
 	// Check LSP tool
 	if tc.LSP != nil {
-		if _, err := exec.LookPath(tc.LSP.Command); err != nil {
+		if _, err := findToolBinary(tc.LSP.Command); err != nil {
 			status.MissingTools = append(status.MissingTools, tc.LSP.Command)
 		}
 	}
 
 	// Check formatter tool
 	if tc.Formatter != nil {
-		if _, err := exec.LookPath(tc.Formatter.Command); err != nil {
+		if _, err := findToolBinary(tc.Formatter.Command); err != nil {
 			status.MissingTools = append(status.MissingTools, tc.Formatter.Command)
 		}
 	}
@@ -67,7 +108,7 @@ func (a *App) InstallTools(lang string) error {
 
 	// Check language runtime first
 	if tc.RuntimeBinary != "" {
-		if _, err := exec.LookPath(tc.RuntimeBinary); err != nil {
+		if _, err := findToolBinary(tc.RuntimeBinary); err != nil {
 			return fmt.Errorf("%s runtime not installed. Please install %s from %s",
 				tc.Name, tc.RuntimeBinary, tc.RuntimeInstallURL)
 		}
@@ -114,12 +155,12 @@ func (a *App) InstallTools(lang string) error {
 func missingTools(tc *LanguageToolchain) []string {
 	var missing []string
 	if tc.LSP != nil {
-		if _, err := exec.LookPath(tc.LSP.Command); err != nil {
+		if _, err := findToolBinary(tc.LSP.Command); err != nil {
 			missing = append(missing, tc.LSP.Command)
 		}
 	}
 	if tc.Formatter != nil {
-		if _, err := exec.LookPath(tc.Formatter.Command); err != nil {
+		if _, err := findToolBinary(tc.Formatter.Command); err != nil {
 			missing = append(missing, tc.Formatter.Command)
 		}
 	}

@@ -24,6 +24,7 @@ interface TerminalTab {
 }
 
 interface TerminalPanelProps {
+  visible: boolean;
   onClose: () => void;
   workingDir?: string;
   settings: EditorSettings;
@@ -31,7 +32,7 @@ interface TerminalPanelProps {
 
 let terminalCounter = 0;
 
-export default function TerminalPanel({ onClose, workingDir, settings }: TerminalPanelProps) {
+export default function TerminalPanel({ visible, onClose, workingDir, settings }: TerminalPanelProps) {
   const [termTabs, setTermTabs] = useState<TerminalTab[]>([]);
   const [activeTermId, setActiveTermId] = useState<string | null>(null);
   const [activePanelTab, setActivePanelTab] = useState("TERMINAL");
@@ -102,25 +103,34 @@ export default function TerminalPanel({ onClose, workingDir, settings }: Termina
         convertEol: true,
         allowProposedApi: true,
         macOptionIsMeta: true,
-        windowsMode: navigator.platform.includes("Win"),
+        windowsMode:
+          navigator.platform.toLowerCase().includes("win") ||
+          navigator.userAgent.toLowerCase().includes("windows"),
       });
 
       const fitAddon = new FitAddon();
       const webLinksAddon = new WebLinksAddon();
       const unicode11 = new Unicode11Addon();
       const clipboardAddon = new ClipboardAddon();
-      const webglAddon = new WebglAddon();
 
       term.loadAddon(fitAddon);
       term.loadAddon(webLinksAddon);
       term.loadAddon(unicode11);
       term.loadAddon(clipboardAddon);
-      term.loadAddon(webglAddon);
       term.unicode.activeVersion = "11";
 
-      webglAddon.onContextLoss(() => {
-        webglAddon.dispose();
-      });
+      // WebGL rendering can fail in restricted/GPU-less environments
+      // (common inside WebView2). Fall back to xterm's default renderer
+      // instead of letting the whole terminal fail to initialize.
+      try {
+        const webglAddon = new WebglAddon();
+        webglAddon.onContextLoss(() => {
+          webglAddon.dispose();
+        });
+        term.loadAddon(webglAddon);
+      } catch (err) {
+        console.warn("[MervCode] WebGL terminal renderer unavailable, using default renderer:", err);
+      }
 
       term.open(el);
       fitAddon.fit();
@@ -182,6 +192,15 @@ export default function TerminalPanel({ onClose, workingDir, settings }: Termina
       requestAnimationFrame(() => fit?.fit());
     }
   }, [activeTermId]);
+
+  useEffect(() => {
+    if (!visible || !activeTermId) return;
+    const fit = fitAddons.current.get(activeTermId);
+    // Wait for the show animation to finish before fitting, so we measure
+    // the final size rather than a mid-animation one.
+    const t = setTimeout(() => fit?.fit(), 160);
+    return () => clearTimeout(t);
+  }, [visible, activeTermId]);
 
   const closeTerminal = useCallback((id: string) => {
     KillTerminal(id);
@@ -278,11 +297,11 @@ export default function TerminalPanel({ onClose, workingDir, settings }: Termina
     <motion.div
       ref={panelRef}
       tabIndex={-1}
-      initial={{ height: 0, opacity: 0 }}
-      animate={{ height: 220, opacity: 1 }}
-      exit={{ height: 0, opacity: 0 }}
+      initial={false}
+      animate={visible ? { height: 220, opacity: 1 } : { height: 0, opacity: 0 }}
       transition={{ duration: 0.15, ease: "easeInOut" }}
       className='w-full bg-[#000000] border-t border-subtle-strong flex flex-col overflow-hidden shrink-0 outline-none'
+      style={{ pointerEvents: visible ? "auto" : "none" }}
     >
       <div className='h-8 flex items-center justify-between px-2 border-b border-subtle shrink-0 bg-panel-alt'>
         <div className='flex items-center gap-0'>

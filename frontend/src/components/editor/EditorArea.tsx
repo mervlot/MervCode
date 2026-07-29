@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { AnimatePresence } from "motion/react";
 import ToolBar from "./ToolBar";
 import TabBar from "./TabBar";
 import TabContextMenu from "./TabContextMenu";
@@ -163,18 +162,16 @@ export default function EditorArea({
           )}
         </div>
 
-        <AnimatePresence>
-          {terminalOpen && (
-            <ErrorBoundary label='Terminal'>
-              <TerminalPanel
-                onClose={() => setTerminalOpen(false)}
-                workingDir={activeFile ? activeFile.path.replace(/[\\/][^\\/]+$/, "") : undefined}
-                settings={settings}
-              />
-            </ErrorBoundary>
-          )}
-        </AnimatePresence>
+        <ErrorBoundary label='Terminal'>
+          <TerminalPanel
+            visible={terminalOpen}
+            onClose={() => setTerminalOpen(false)}
+            workingDir={activeFile ? activeFile.path.replace(/[\\/][^\\/]+$/, "") : undefined}
+            settings={settings}
+          />
+        </ErrorBoundary>
       </div>
     </main>
+
   );
 }

@@ -103,7 +103,13 @@ func (a *App) ensureLSPClient(lang, root string) (*lspClient, error) {
 		return nil, fmt.Errorf("missing tools: %v", toolStatus.MissingTools)
 	}
 
-	cmd := exec.Command(cmdName, args...)
+	resolvedCmd, err := findToolBinary(cmdName)
+	if err != nil {
+		a.lspMu.Unlock()
+		return nil, fmt.Errorf("locate %s: %w", cmdName, err)
+	}
+
+	cmd := exec.Command(resolvedCmd, args...)
 	if root != "" {
 		cmd.Dir = root
 	}
@@ -402,8 +408,6 @@ func (cl *lspClient) readMessage() ([]byte, error) {
 		return body, nil
 	}
 }
-
-
 
 // toURI converts an absolute filesystem path to a valid percent-encoded file:// URI.
 // On Windows, C:\foo becomes file:///C:/foo (space→%20, etc.).

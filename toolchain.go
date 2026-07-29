@@ -8,8 +8,8 @@ import (
 )
 
 type LSPConfig struct {
-	Command   string   `json:"command"`
-	Args      []string `json:"args"`
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
 }
 
 type FormatterConfig struct {
@@ -44,9 +44,9 @@ func init() {
 				Command: "gofmt",
 				Stdin:   true,
 			},
-			Markers:            []string{"go.mod"},
-			RuntimeBinary:      "go",
-			RuntimeInstallURL:  "https://go.dev/dl/",
+			Markers:           []string{"go.mod"},
+			RuntimeBinary:     "go",
+			RuntimeInstallURL: "https://go.dev/dl/",
 			ToolInstallMethods: map[string]string{
 				"gopls": "go install golang.org/x/tools/gopls@latest",
 				"gofmt": "Comes with Go runtime",
@@ -66,7 +66,11 @@ func (a *App) FormatDocument(lang, filePath, content string) (string, error) {
 	}
 
 	f := tc.Formatter
-	cmd := exec.Command(f.Command, f.Args...)
+	resolvedCmd, err := findToolBinary(f.Command)
+	if err != nil {
+		return "", fmt.Errorf("locate %s: %w", f.Command, err)
+	}
+	cmd := exec.Command(resolvedCmd, f.Args...)
 
 	if f.Stdin {
 		cmd.Stdin = strings.NewReader(content)

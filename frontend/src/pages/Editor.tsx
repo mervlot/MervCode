@@ -3,6 +3,7 @@ import * as monaco from "monaco-editor";
 
 import { setupMonaco } from "../editor/monaco/setup";
 import { applyLanguageFeatures } from "../editor/monaco/apply";
+import { toMonacoOptions } from "../editor/monaco/toMonacoOptions";
 import { getCustomActions } from "../editor/keybinding";
 import { useTheme } from "../contexts/ThemeContext";
 import type { EditorSettings } from "../types";
@@ -68,6 +69,7 @@ export default function Editor({
         model,
         automaticLayout: true,
         theme: theme === "light" ? "vs" : "vs-dark",
+        ...(settingsRef.current ? toMonacoOptions(settingsRef.current) : {}),
       });
 
       editorRef.current = editor;
@@ -184,19 +186,11 @@ export default function Editor({
 
   useEffect(() => {
     const editor = editorRef.current;
+    const model = modelRef.current;
     if (!editor || !settings) return;
 
-    editor.updateOptions({
-      fontSize: settings.fontSize,
-      tabSize: settings.tabSize,
-      insertSpaces: settings.insertSpaces,
-      wordWrap: settings.wordWrap,
-      minimap: { enabled: settings.minimap },
-      fontLigatures: settings.fontLigatures,
-      lineNumbers: settings.lineNumbers,
-      formatOnPaste: settings.formatOnPaste,
-      formatOnType: settings.formatOnType,
-    });
+    editor.updateOptions(toMonacoOptions(settings));
+    model?.updateOptions(toModelOptions(settings));
   }, [settings]);
 
   return <div ref={containerRef} className='w-full h-full min-h-0' />;
