@@ -58,7 +58,7 @@ func (a *App) getLSPClient(lang string) *lspClient {
 // (there is one per server group for the whole workspace — see
 // lspServerGroup — not one per file or per sub-project; the server itself
 // resolves each file's nearest tsconfig.json/go.mod internally).
-func (a *App) getLSPClientForFile(lang, path string) *lspClient {
+func (a *App) getLSPClientForFile(lang, _ string) *lspClient {
 	return a.getLSPClient(lang)
 }
 

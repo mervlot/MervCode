@@ -162,14 +162,11 @@ export default function EditorArea({
           )}
         </div>
 
-        <ErrorBoundary label='Terminal'>
+      
           <TerminalPanel
-            visible={terminalOpen}
-            onClose={() => setTerminalOpen(false)}
-            workingDir={activeFile ? activeFile.path.replace(/[\\/][^\\/]+$/, "") : undefined}
-            settings={settings}
+      
           />
-        </ErrorBoundary>
+       
       </div>
     </main>
 

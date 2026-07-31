@@ -1,582 +1,217 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { motion } from "motion/react";
+import { useEffect, useRef, useState, useCallback } from "react";
+
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { ClipboardAddon } from "@xterm/addon-clipboard";
-import { WebglAddon } from "@xterm/addon-webgl";
-import { SearchAddon } from "@xterm/addon-search";
+
 import "@xterm/xterm/css/xterm.css";
+
 import {
-  CreateTerminal,
-  WriteTerminal,
-  KillTerminal,
   ResizeTerminal,
-  ListAvailableShells,
+  StartTerminal,
+  TerminalInput,
 } from "../../../wailsjs/go/main/App";
-import { EventsOn, EventsOff } from "../../../wailsjs/runtime/runtime";
-import type { EditorSettings } from "../../types";
 
-interface TerminalTab {
-  id: string;
-  label: string;
-  shell: string;
-}
+import { EventsOn } from "../../../wailsjs/runtime/runtime";
 
-interface TerminalPanelProps {
-  visible: boolean;
-  onClose: () => void;
-  workingDir?: string;
-  settings: EditorSettings;
-}
+const TerminalPanel = () => {
+  const ref = useRef<HTMLDivElement>(null);
 
-let terminalCounter = 0;
+  const [height, setHeight] = useState<number>(300);
+  const isDragging = useRef<boolean>(false);
+  const startY = useRef<number>(0);
+  const startHeight = useRef<number>(300);
 
-export default function TerminalPanel({ visible, onClose, workingDir, settings }: TerminalPanelProps) {
-  const [termTabs, setTermTabs] = useState<TerminalTab[]>([]);
-  const [activeTermId, setActiveTermId] = useState<string | null>(null);
-  const [activePanelTab, setActivePanelTab] = useState("TERMINAL");
-  const [shellDropdownOpen, setShellDropdownOpen] = useState(false);
-  const [availableShells, setAvailableShells] = useState<string[]>([]);
-  const [searchVisible, setSearchVisible] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const containersRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  const panelRef = useRef<HTMLDivElement>(null);
-  const termInstances = useRef<Map<string, Terminal>>(new Map());
-  const fitAddons = useRef<Map<string, FitAddon>>(new Map());
-  const searchAddons = useRef<Map<string, SearchAddon>>(new Map());
-  const initialized = useRef(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      isDragging.current = true;
+      startY.current = e.clientY;
+      startHeight.current = height;
+
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "ns-resize";
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        if (!isDragging.current) return;
+
+        const deltaY = startY.current - moveEvent.clientY;
+        const newHeight = Math.max(
+          100,
+          Math.min(1000, startHeight.current + deltaY),
+        );
+
+        setHeight(newHeight);
+      };
+
+      const handleMouseUp = () => {
+        isDragging.current = false;
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+      };
+
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    },
+    [height],
+  );
 
   useEffect(() => {
-    ListAvailableShells().then(setAvailableShells).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShellDropdownOpen(false);
-      }
-    }
-    if (shellDropdownOpen) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [shellDropdownOpen]);
-
-  const initTerminalInstance = useCallback((id: string, shell: string) => {
-    const container = containersRef.current.get(id);
-    if (!container) {
-      console.warn(`[MervCode] Terminal container #${id} not found in DOM — will retry`);
-      return false;
-    }
-
-    console.log(`[MervCode] Initializing terminal #${id} with shell="${shell}"`);
+    if (!ref.current) return;
 
     const term = new Terminal({
-      theme: {
-        background: "#000000",
-        foreground: "#d4d4d4",
-        cursor: "#DC143C",
-        cursorAccent: "#000000",
-        selectionBackground: "#DC143C44",
-        selectionForeground: "#ffffff",
-        black: "#000000",
-        red: "#DC143C",
-        green: "#4EC9B0",
-        yellow: "#DCDCAA",
-        blue: "#569CD6",
-        magenta: "#C586C0",
-        cyan: "#9CDCFE",
-        white: "#d4d4d4",
-      },
-      fontFamily: "'Monaspace Argon', 'Cascadia Code', 'Fira Code', monospace",
-      fontSize: 13,
-      lineHeight: 1.3,
-      cursorBlink: true,
-      cursorStyle: "block",
-      scrollback: 5000,
-      convertEol: true,
       allowProposedApi: true,
-      macOptionIsMeta: true,
-      windowsMode:
-        navigator.platform.toLowerCase().includes("win") ||
-        navigator.userAgent.toLowerCase().includes("windows"),
+      cursorBlink: true,
+      cursorStyle: "bar",
+      cursorWidth: 2,
+
+      fontFamily: '"Cascadia Code", "JetBrains Mono", Consolas, monospace',
+      fontSize: 14,
+      lineHeight: 1.2,
+
+      scrollback: 5000,
+      smoothScrollDuration: 100,
+
+      theme: {
+        background: "#000",
+        foreground: "#e4e4e7",
+        cursor: "#fafafa",
+        cursorAccent: "#09090b",
+        selectionBackground: "#3f3f46",
+
+        black: "#18181b",
+        brightBlack: "#71717a",
+        red: "#f87171",
+        brightRed: "#fca5a5",
+        green: "#4ade80",
+        brightGreen: "#86efac",
+        yellow: "#facc15",
+        brightYellow: "#fde047",
+        blue: "#60a5fa",
+        brightBlue: "#93c5fd",
+        magenta: "#c084fc",
+        brightMagenta: "#d8b4fe",
+        cyan: "#22d3ee",
+        brightCyan: "#67e8f9",
+        white: "#d4d4d8",
+        brightWhite: "#fafafa",
+      },
     });
 
     const fitAddon = new FitAddon();
     const webLinksAddon = new WebLinksAddon();
-    const unicode11 = new Unicode11Addon();
-    const clipboardAddon = new ClipboardAddon();
-    const searchAddon = new SearchAddon();
+    const unicodeAddon = new Unicode11Addon();
 
     term.loadAddon(fitAddon);
     term.loadAddon(webLinksAddon);
-    term.loadAddon(unicode11);
-    term.loadAddon(clipboardAddon);
-    term.loadAddon(searchAddon);
+    term.loadAddon(unicodeAddon);
+
     term.unicode.activeVersion = "11";
 
-    term.open(container);
-
-    // Fit AFTER open so the terminal measures the actual container size
+    term.open(ref.current);
     fitAddon.fit();
-    console.log(`[MervCode] Terminal #${id} opened and fitted`);
 
-    // WebGL must be loaded AFTER term.open() to avoid
-    // "task queue exceeded" deadline errors from xterm's
-    // internal renderer scheduling.
-    try {
-      const webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => {
-        console.warn(`[MervCode] WebGL context lost for #${id}, disposing`);
-        webglAddon.dispose();
-      });
-      term.loadAddon(webglAddon);
-      console.log(`[MervCode] WebGL renderer enabled for #${id}`);
-    } catch {
-      console.warn(`[MervCode] WebGL unavailable for #${id}, using canvas renderer`);
-    }
-
-    termInstances.current.set(id, term);
-    fitAddons.current.set(id, fitAddon);
-    searchAddons.current.set(id, searchAddon);
-
-    // Register event listeners BEFORE calling CreateTerminal to avoid
-    // missing the first output or a fast exit
-    EventsOn(`terminal:output:${id}`, (data: string) => {
-      if (data) {
-        console.log(`[MervCode] terminal:output #${id} (${data.length} bytes)`);
-        term.write(data);
-      }
+    const offOutput = EventsOn("terminal:output", (output) => {
+      term.write(String(output));
     });
 
-    EventsOn(`terminal:exit:${id}`, () => {
-      console.log(`[MervCode] terminal:exit #${id}`);
-      term.write("\r\n\x1b[90m[Process exited]\x1b[0m\r\n");
+    const resizeTerminal = () => {
+      fitAddon.fit();
+      void ResizeTerminal(term.cols, term.rows).catch(console.error);
+    };
+
+    const resizeObserver = new ResizeObserver(resizeTerminal);
+    resizeObserver.observe(ref.current);
+
+    const inputDisposable = term.onData((data) => {
+      void TerminalInput(data).catch(console.error);
     });
 
-    console.log(`[MervCode] Calling CreateTerminal(#${id}, ...)`);
-    CreateTerminal(id, workingDir || "", shell)
+    void StartTerminal()
       .then(() => {
-        console.log(`[MervCode] CreateTerminal #${id} succeeded`);
-        term.onData((data) => {
-          WriteTerminal(id, data);
-        });
-        term.onResize(({ cols, rows }) => {
-          ResizeTerminal(id, cols, rows);
-        });
+        resizeTerminal();
         term.focus();
       })
-      .catch((err) => {
-        console.error(`[MervCode] CreateTerminal #${id} failed:`, err);
-        term.write(`\r\n\x1b[31mFailed to start shell: ${err}\x1b[0m\r\n`);
+      .catch((error) => {
+        term.writeln(
+          `\r\n\x1b[31mFailed to start terminal: ${String(error)}\x1b[0m`,
+        );
       });
 
-    return true;
-  }, [workingDir]);
-
-  const createNewTerminal = useCallback((shellOverride?: string) => {
-    const id = `term-${++terminalCounter}`;
-    const shell = shellOverride ?? settings.defaultShell;
-    const name = shell ? shell.split(/[/\\]/).pop() || "shell" : "shell";
-    const label = shellOverride
-      ? name
-      : settings.defaultShell
-        ? name
-        : "pwsh";
-
-    console.log(`[MervCode] Creating new terminal tab #${id} shell="${shell}" label="${label}"`);
-
-    setTermTabs((prev) => [...prev, { id, label, shell }]);
-    setActiveTermId(id);
-    setActivePanelTab("TERMINAL");
-
-    // Use requestAnimationFrame + retry loop to wait for the DOM container
-    // to be committed by React before trying to init the xterm instance.
-    let retries = 0;
-    const maxRetries = 20;
-
-    function tryInit() {
-      const ok = initTerminalInstance(id, shell);
-      if (!ok) {
-        retries++;
-        if (retries < maxRetries) {
-          requestAnimationFrame(tryInit);
-        } else {
-          console.error(`[MervCode] Giving up on terminal #${id} after ${maxRetries} retries — container never appeared`);
-        }
-      }
-    }
-
-    requestAnimationFrame(tryInit);
-  }, [settings.defaultShell, initTerminalInstance]);
-
-  useEffect(() => {
-    if (!initialized.current) {
-      initialized.current = true;
-      createNewTerminal();
-    }
-  }, [createNewTerminal]);
-
-  useEffect(() => {
-    if (activeTermId) {
-      const el = containersRef.current.get(activeTermId);
-      if (!el) return;
-      const observer = new ResizeObserver(() => {
-        const fit = fitAddons.current.get(activeTermId);
-        fit?.fit();
-      });
-      observer.observe(el);
-      return () => observer.disconnect();
-    }
-  }, [activeTermId]);
-
-  useEffect(() => {
-    if (activeTermId) {
-      const term = termInstances.current.get(activeTermId);
-      term?.focus();
-      const fit = fitAddons.current.get(activeTermId);
-      requestAnimationFrame(() => fit?.fit());
-    }
-  }, [activeTermId]);
-
-  useEffect(() => {
-    if (!visible || !activeTermId) return;
-    const fit = fitAddons.current.get(activeTermId);
-    // Wait for the show animation to finish before fitting, so we measure
-    // the final size rather than a mid-animation one.
-    const t = setTimeout(() => fit?.fit(), 160);
-    return () => clearTimeout(t);
-  }, [visible, activeTermId]);
-
-  const toggleSearch = useCallback(() => {
-    setSearchVisible((v) => {
-      if (!v) {
-        // Opening search — focus input on next render
-        requestAnimationFrame(() => searchInputRef.current?.focus());
-      } else {
-        setSearchQuery("");
-      }
-      return !v;
-    });
-  }, []);
-
-  const closeSearch = useCallback(() => {
-    setSearchVisible(false);
-    setSearchQuery("");
-    const term = activeTermId ? termInstances.current.get(activeTermId) : undefined;
-    term?.focus();
-  }, [activeTermId]);
-
-  const handleSearchInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchQuery(value);
-    const searchAddon = activeTermId ? searchAddons.current.get(activeTermId) : undefined;
-    if (searchAddon) {
-      if (value) {
-        searchAddon.findOptions.caseSensitive = false;
-        searchAddon.findOptions.regex = false;
-        searchAddon.findOptions.wholeWord = false;
-        searchAddon.findNext(value, { incremental: true });
-      } else {
-        searchAddon.clearActiveMarker();
-      }
-    }
-  }, [activeTermId]);
-
-  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    const searchAddon = activeTermId ? searchAddons.current.get(activeTermId) : undefined;
-    if (!searchAddon || !searchQuery) return;
-    if (e.key === "Enter") {
-      e.preventDefault();
-      searchAddon.findNext(searchQuery, { incremental: false });
-    } else if (e.key === "Escape") {
-      closeSearch();
-    }
-  }, [activeTermId, searchQuery, closeSearch]);
-
-  const closeTerminal = useCallback((id: string) => {
-    KillTerminal(id);
-    EventsOff(`terminal:output:${id}`);
-    EventsOff(`terminal:exit:${id}`);
-
-    const term = termInstances.current.get(id);
-    term?.dispose();
-    termInstances.current.delete(id);
-    fitAddons.current.delete(id);
-    searchAddons.current.delete(id);
-
-    setTermTabs((prev) => {
-      const next = prev.filter((t) => t.id !== id);
-      if (activeTermId === id && next.length > 0) {
-        setActiveTermId(next[next.length - 1].id);
-      } else if (next.length === 0) {
-        setActiveTermId(null);
-      }
-      return next;
-    });
-  }, [activeTermId]);
-
-  useEffect(() => {
     return () => {
-      termInstances.current.forEach((term, id) => {
-        KillTerminal(id);
-        EventsOff(`terminal:output:${id}`);
-        EventsOff(`terminal:exit:${id}`);
-        term.dispose();
-      });
-      termInstances.current.clear();
-      fitAddons.current.clear();
-      searchAddons.current.clear();
+      inputDisposable.dispose();
+      resizeObserver.disconnect();
+      offOutput();
+      term.dispose();
     };
   }, []);
 
-  function switchTermTab(dir: 1 | -1) {
-    if (termTabs.length < 2) return;
-    const idx = termTabs.findIndex((t) => t.id === activeTermId);
-    const next = (idx + dir + termTabs.length) % termTabs.length;
-    setActiveTermId(termTabs[next].id);
-  }
-
-  useEffect(() => {
-    const el = panelRef.current;
-    if (!el) return;
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.ctrlKey && e.key === "Tab") {
-        e.preventDefault();
-        e.stopPropagation();
-        switchTermTab(e.shiftKey ? -1 : 1);
-        return;
-      }
-      if (e.ctrlKey && e.key === "w") {
-        if (activeTermId) {
-          e.preventDefault();
-          e.stopPropagation();
-          closeTerminal(activeTermId);
-        }
-        return;
-      }
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "c") {
-        const term = activeTermId ? termInstances.current.get(activeTermId) : undefined;
-        if (term?.hasSelection()) {
-          e.preventDefault();
-          navigator.clipboard.writeText(term.getSelection());
-        }
-        return;
-      }
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "f") {
-        e.preventDefault();
-        toggleSearch();
-        return;
-      }
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "v") {
-        e.preventDefault();
-        navigator.clipboard.readText().then((text) => {
-          const term = activeTermId ? termInstances.current.get(activeTermId) : undefined;
-          if (term && text) {
-            term.paste(text);
-          }
-        }).catch(() => {});
-        return;
-      }
-    }
-
-    el.addEventListener("keydown", onKeyDown);
-    return () => el.removeEventListener("keydown", onKeyDown);
-  }, [activeTermId, termTabs, closeTerminal, toggleSearch]);
-
-  function handleShellPick(shell: string) {
-    setShellDropdownOpen(false);
-    createNewTerminal(shell);
-  }
-
-  const PANEL_TABS = [ "TERMINAL"];
-
   return (
-    <motion.div
-      ref={panelRef}
-      tabIndex={-1}
-      initial={false}
-      animate={visible ? { height: 220, opacity: 1 } : { height: 0, opacity: 0 }}
-      transition={{ duration: 0.15, ease: "easeInOut" }}
-      className='w-full bg-[#000000] border-t border-subtle-strong flex flex-col overflow-hidden shrink-0 outline-none'
-      style={{ pointerEvents: visible ? "auto" : "none" }}
+    <div
+      style={{
+        width: "100%",
+        height: `${height}px`,
+      
+        overflow: "hidden",
+      
+        display: "flex",
+        flexDirection: "column",
+      
+      }}
     >
-      <div className='h-8 flex items-center justify-between px-2 border-b border-subtle shrink-0 bg-panel-alt'>
-        <div className='flex items-center gap-0'>
-          {PANEL_TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActivePanelTab(tab)}
-              className={`px-3 h-8 text-[10.5px] tracking-wide border-b-2 transition-colors ${
-                tab === activePanelTab
-                  ? "border-accent text-secondary"
-                  : "border-transparent text-faint hover:text-tertiary"
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        <div className='flex items-center gap-1'>
-          {activePanelTab === "TERMINAL" && (
-            <div className='flex items-center gap-0 mr-2'>
-              {termTabs.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setActiveTermId(t.id)}
-                  className={`group flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors ${
-                    t.id === activeTermId
-                      ? "bg-white/10 text-secondary"
-                      : "text-faint hover:text-tertiary hover:bg-white/5"
-                  }`}
-                >
-                  <i className='bi bi-terminal text-[9px]' />
-                  {t.label}
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeTerminal(t.id);
-                    }}
-                    className='opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity ml-0.5'
-                  >
-                    ×
-                  </span>
-                </button>
-              ))}
-
-              <div className='flex items-center border-l border-white/10 ml-1 pl-1 gap-0'>
-                <button
-                  onClick={() => createNewTerminal()}
-                  className='w-5 h-5 flex items-center justify-center text-faint hover:text-secondary hover:bg-white/5 rounded transition-colors'
-                  title='New Terminal'
-                >
-                  <i className='bi bi-plus text-[12px]' />
-                </button>
-                <div ref={dropdownRef} className='relative'>
-                  <button
-                    onClick={() => setShellDropdownOpen((v) => !v)}
-                    className='w-4 h-5 flex items-center justify-center text-faint hover:text-secondary hover:bg-white/5 rounded transition-colors'
-                    title='New Terminal With Shell...'
-                  >
-                    <i className='bi bi-chevron-down text-[9px]' />
-                  </button>
-
-                  {shellDropdownOpen && (
-                    <div className='absolute top-full right-0 mt-1 w-44 py-1 rounded-lg border border-white/12 bg-[#141414] shadow-app z-50'>
-                      <button
-                        onClick={() => handleShellPick("")}
-                        className='flex w-full items-center gap-2 px-3 py-1.5 text-[12px] text-secondary hover:text-primary hover:bg-white/5 transition-colors'
-                      >
-                        <i className='bi bi-terminal text-[10px]' />
-                        Auto-detect
-                      </button>
-                      <div className='mx-2 my-1 h-px bg-white/8' />
-                      {availableShells.map((shell) => (
-                        <button
-                          key={shell}
-                          onClick={() => handleShellPick(shell)}
-                          className='flex w-full items-center gap-2 px-3 py-1.5 text-[12px] text-secondary hover:text-primary hover:bg-white/5 transition-colors'
-                        >
-                          <i className='bi bi-cpu text-[10px]' />
-                          {shell}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <button
-            onClick={toggleSearch}
-            className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
-              searchVisible ? "text-accent" : "text-faint hover:text-secondary"
-            }`}
-            title='Search (Ctrl+Shift+F)'
-          >
-            <i className='bi bi-search text-[11px]' />
-          </button>
-          <button
-            onClick={onClose}
-            className='w-6 h-6 flex items-center justify-center hover:text-secondary rounded transition-colors text-faint'
-          >
-            <i className='bi bi-x text-[12px]' />
-          </button>
-        </div>
+      {/* Flat Top Bar (Also serves as the drag handle) */}
+      <div
+        onMouseDown={handleMouseDown}
+        style={{
+          height: "36px",
+          width: "100%",
+          cursor: "ns-resize",
+       
+          display: "flex",
+          alignItems: "center",
+      
+         
+          flexShrink: 0,
+     
+        }}
+      >
+        <span
+          style={{
+            color: "#a1a1aa",
+            fontSize: "12px",
+            fontFamily: "sans-serif",
+            textTransform: "uppercase",
+            letterSpacing: "1px",
+            userSelect: "none",
+            padding:"2px",
+          }}
+        >
+          Terminal
+        </span>
       </div>
 
-      <div className='flex-1 min-h-0 relative' onClick={() => {
-        const term = activeTermId ? termInstances.current.get(activeTermId) : undefined;
-        term?.focus();
-      }}>
-        {activePanelTab === "TERMINAL" ? (
-          termTabs.map((t) => (
-            <div
-              key={t.id}
-              ref={(el) => {
-                if (el) containersRef.current.set(t.id, el);
-                else containersRef.current.delete(t.id);
-              }}
-              className={`absolute inset-0 ${t.id === activeTermId ? "" : "hidden"}`}
-            />
-          ))
-        ) : (
-          <div className='h-full flex items-center justify-center text-faint text-[11px]'>
-            No output
-          </div>
-        )}
+      {/* Terminal Viewport */}
+      <div
+        style={{
+          flex: 1,
 
-        {/* Zed-like terminal search bar */}
-        {searchVisible && (
-          <div
-            className='absolute top-0 right-0 flex items-center gap-1.5 px-2 py-1 m-2 rounded-lg border border-white/12 bg-[#141414] shadow-app z-10'
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <i className='bi bi-search text-[10px] text-faint' />
-            <input
-              ref={searchInputRef}
-              type='text'
-              value={searchQuery}
-              onChange={handleSearchInput}
-              onKeyDown={handleSearchKeyDown}
-              placeholder='Find…'
-              className='w-36 bg-transparent outline-none text-[12px] text-primary placeholder:text-tertiary'
-            />
-            <button
-              onClick={() => {
-                const sa = activeTermId ? searchAddons.current.get(activeTermId) : undefined;
-                if (sa && searchQuery) sa.findPrevious(searchQuery);
-              }}
-              className='text-faint hover:text-secondary transition-colors'
-              title='Previous match'
-            >
-              <i className='bi bi-chevron-up text-[9px]' />
-            </button>
-            <button
-              onClick={() => {
-                const sa = activeTermId ? searchAddons.current.get(activeTermId) : undefined;
-                if (sa && searchQuery) sa.findNext(searchQuery);
-              }}
-              className='text-faint hover:text-secondary transition-colors'
-              title='Next match'
-            >
-              <i className='bi bi-chevron-down text-[9px]' />
-            </button>
-            <button
-              onClick={closeSearch}
-              className='text-faint hover:text-secondary transition-colors ml-1'
-              title='Close search'
-            >
-              <i className='bi bi-x text-[12px]' />
-            </button>
-          </div>
-        )}
+          overflow: "hidden",
+        }}
+      >
+        <div
+          ref={ref}
+          style={{
+            width: "100%",
+            height: "100%",
+            
+          }}
+        />
       </div>
-    </motion.div>
+    </div>
   );
-}
+};
+
+export default TerminalPanel;

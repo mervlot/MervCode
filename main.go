@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -39,8 +40,8 @@ func main() {
 		// Safely tears down file system watchers and terminal sessions on exit
 		OnShutdown: func(ctx context.Context) {
 			app.StopWatcher()
-			app.KillAllTerminals()
-		},    
+			app.StopTerminal()
+		},
 
 		Bind: []interface{}{
 			app,

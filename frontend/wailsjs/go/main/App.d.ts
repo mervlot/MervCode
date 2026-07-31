@@ -9,8 +9,6 @@ export function CreateFile(arg1:string):Promise<void>;
 
 export function CreateFolder(arg1:string):Promise<void>;
 
-export function CreateTerminal(arg1:string,arg2:string,arg3:string):Promise<void>;
-
 export function Delete(arg1:string):Promise<void>;
 
 export function DeletePath(arg1:string):Promise<void>;
@@ -19,8 +17,6 @@ export function FolderDialog():Promise<string>;
 
 export function FormatDocument(arg1:string,arg2:string,arg3:string):Promise<string>;
 
-export function GetDefaultShell():Promise<string>;
-
 export function GitStatus(arg1:string):Promise<types.GitStatusResult>;
 
 export function Greet(arg1:string):Promise<string>;
@@ -28,10 +24,6 @@ export function Greet(arg1:string):Promise<string>;
 export function InspectAndReadFile(arg1:string):Promise<types.FileResponse>;
 
 export function InstallTools(arg1:string):Promise<void>;
-
-export function KillAllTerminals():Promise<void>;
-
-export function KillTerminal(arg1:string):Promise<void>;
 
 export function LSPChangeFile(arg1:string,arg2:string,arg3:string,arg4:number):Promise<void>;
 
@@ -46,8 +38,6 @@ export function LSPHover(arg1:string,arg2:string,arg3:number,arg4:number):Promis
 export function LSPOpenFile(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function LSPReferences(arg1:string,arg2:string,arg3:number,arg4:number):Promise<Array<types.LSPLocation>>;
-
-export function ListAvailableShells():Promise<Array<string>>;
 
 export function OpenSettingsWindow():Promise<void>;
 
@@ -65,14 +55,18 @@ export function Rename(arg1:string,arg2:string):Promise<void>;
 
 export function RenamePath(arg1:string,arg2:string):Promise<void>;
 
-export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
+export function ResizeTerminal(arg1:number,arg2:number):Promise<void>;
 
 export function SearchInWorkspace(arg1:string,arg2:string):Promise<Array<types.SearchMatch>>;
 
+export function StartTerminal():Promise<void>;
+
 export function StartWatcher(arg1:string):Promise<void>;
+
+export function StopTerminal():Promise<void>;
 
 export function StopWatcher():Promise<void>;
 
-export function WriteFile(arg1:string,arg2:string):Promise<void>;
+export function TerminalInput(arg1:string):Promise<void>;
 
-export function WriteTerminal(arg1:string,arg2:string):Promise<void>;
+export function WriteFile(arg1:string,arg2:string):Promise<void>;

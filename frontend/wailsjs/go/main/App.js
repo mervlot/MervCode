@@ -14,10 +14,6 @@ export function CreateFolder(arg1) {
   return window['go']['main']['App']['CreateFolder'](arg1);
 }
 
-export function CreateTerminal(arg1, arg2, arg3) {
-  return window['go']['main']['App']['CreateTerminal'](arg1, arg2, arg3);
-}
-
 export function Delete(arg1) {
   return window['go']['main']['App']['Delete'](arg1);
 }
@@ -34,10 +30,6 @@ export function FormatDocument(arg1, arg2, arg3) {
   return window['go']['main']['App']['FormatDocument'](arg1, arg2, arg3);
 }
 
-export function GetDefaultShell() {
-  return window['go']['main']['App']['GetDefaultShell']();
-}
-
 export function GitStatus(arg1) {
   return window['go']['main']['App']['GitStatus'](arg1);
 }
@@ -52,14 +44,6 @@ export function InspectAndReadFile(arg1) {
 
 export function InstallTools(arg1) {
   return window['go']['main']['App']['InstallTools'](arg1);
-}
-
-export function KillAllTerminals() {
-  return window['go']['main']['App']['KillAllTerminals']();
-}
-
-export function KillTerminal(arg1) {
-  return window['go']['main']['App']['KillTerminal'](arg1);
 }
 
 export function LSPChangeFile(arg1, arg2, arg3, arg4) {
@@ -88,10 +72,6 @@ export function LSPOpenFile(arg1, arg2, arg3) {
 
 export function LSPReferences(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['LSPReferences'](arg1, arg2, arg3, arg4);
-}
-
-export function ListAvailableShells() {
-  return window['go']['main']['App']['ListAvailableShells']();
 }
 
 export function OpenSettingsWindow() {
@@ -126,26 +106,34 @@ export function RenamePath(arg1, arg2) {
   return window['go']['main']['App']['RenamePath'](arg1, arg2);
 }
 
-export function ResizeTerminal(arg1, arg2, arg3) {
-  return window['go']['main']['App']['ResizeTerminal'](arg1, arg2, arg3);
+export function ResizeTerminal(arg1, arg2) {
+  return window['go']['main']['App']['ResizeTerminal'](arg1, arg2);
 }
 
 export function SearchInWorkspace(arg1, arg2) {
   return window['go']['main']['App']['SearchInWorkspace'](arg1, arg2);
 }
 
+export function StartTerminal() {
+  return window['go']['main']['App']['StartTerminal']();
+}
+
 export function StartWatcher(arg1) {
   return window['go']['main']['App']['StartWatcher'](arg1);
+}
+
+export function StopTerminal() {
+  return window['go']['main']['App']['StopTerminal']();
 }
 
 export function StopWatcher() {
   return window['go']['main']['App']['StopWatcher']();
 }
 
-export function WriteFile(arg1, arg2) {
-  return window['go']['main']['App']['WriteFile'](arg1, arg2);
+export function TerminalInput(arg1) {
+  return window['go']['main']['App']['TerminalInput'](arg1);
 }
 
-export function WriteTerminal(arg1, arg2) {
-  return window['go']['main']['App']['WriteTerminal'](arg1, arg2);
+export function WriteFile(arg1, arg2) {
+  return window['go']['main']['App']['WriteFile'](arg1, arg2);
 }

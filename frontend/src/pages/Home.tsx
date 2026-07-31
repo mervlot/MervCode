@@ -197,6 +197,7 @@ export default function Home() {
 
   return (
     <div className="w-full h-screen flex flex-col bg-app-surface overflow-hidden select-none">
+      {}
       <Header
         onRequestQuit={requestQuit}
         terminalOpen={terminalOpen}

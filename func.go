@@ -17,6 +17,7 @@ import (
 
 	"merv-code/types"
 
+	"github.com/UserExistsError/conpty"
 	"github.com/fsnotify/fsnotify"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -32,23 +33,19 @@ type App struct {
 	lspMu      sync.Mutex
 	lspClients map[string]*lspClient
 	lspRoots   map[string]string
-
-	terminalMu sync.Mutex
-	terminals  map[string]*TerminalSession
+	pty        *conpty.ConPty
 }
 
 func NewApp() *App {
 	return &App{
 		lspClients: make(map[string]*lspClient),
 		lspRoots:   make(map[string]string),
-		terminals:  make(map[string]*TerminalSession),
 	}
 }
 
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
 }
-
 // StartWatcher sets up a recursive file watcher on the targeted workspace path
 func (a *App) StartWatcher(rootPath string) error {
 	a.watcherMu.Lock()

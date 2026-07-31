@@ -179,7 +179,7 @@ func installCommandFor(binary string) string {
 			return "sudo apt install golang-go"
 		}
 	}
-	return fmt.Sprintf("Visit the language's official download page")
+	return "Visit the language's official download page"
 }
 
 // parseArgs splits an install command string like "go install pkg@latest"
