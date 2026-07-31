@@ -6,7 +6,7 @@ import SettingsPanel from "./SettingsPanel";
 import PlaceholderPanel from "./PlaceHolderPanel";
 import ErrorBoundary from "./ErrorBoundary";
 import type { EditorSettings, FileTab, WorkspaceRoot } from "../../types";
-
+import AndroidPanel from "./AndroidPanel";
 interface SidebarProps {
   activeTab: string;
   setActiveTab: React.Dispatch<React.SetStateAction<string>>;
@@ -75,6 +75,10 @@ export default function Sidebar({
               <SourceControlPanel
                 rootPath={workspaceRoot?.path ?? null}
                 onFileOpen={(path) => openPathByString(path)}
+              />
+            ) : activeTab === "android" ? (
+              <AndroidPanel
+                onBack={() => setActiveTab("explorer")}
               />
             ) : activeTab === "settings" ? (
               <SettingsPanel

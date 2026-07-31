@@ -19,7 +19,9 @@ interface EditorAreaProps {
   settings: EditorSettings;
   onSettingsChange: (patch: Partial<EditorSettings>) => void;
   cursor: { line: number; column: number };
-  setCursor: React.Dispatch<React.SetStateAction<{ line: number; column: number }>>;
+  setCursor: React.Dispatch<
+    React.SetStateAction<{ line: number; column: number }>
+  >;
   activeFile: FileTab | undefined;
   terminalOpen: boolean;
   setTerminalOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -32,10 +34,22 @@ interface EditorAreaProps {
   closeOthers: (path: string) => void;
   closeTabsToRight: (path: string) => void;
   closeAllTabs: () => void;
-  handleContextMenu: (event: React.MouseEvent<HTMLDivElement>, path: string) => void;
-  handleTabDragStart: (event: React.DragEvent<HTMLDivElement>, path: string) => void;
-  handleTabDragOver: (event: React.DragEvent<HTMLDivElement>, targetPath: string) => void;
-  handleTabDrop: (event: React.DragEvent<HTMLDivElement>, targetPath: string) => void;
+  handleContextMenu: (
+    event: React.MouseEvent<HTMLDivElement>,
+    path: string,
+  ) => void;
+  handleTabDragStart: (
+    event: React.DragEvent<HTMLDivElement>,
+    path: string,
+  ) => void;
+  handleTabDragOver: (
+    event: React.DragEvent<HTMLDivElement>,
+    targetPath: string,
+  ) => void;
+  handleTabDrop: (
+    event: React.DragEvent<HTMLDivElement>,
+    targetPath: string,
+  ) => void;
   handleTabDragEnd: () => void;
   copyTabPath: (path: string) => void;
   revealTabInExplorer: (path: string) => void;
@@ -162,13 +176,11 @@ export default function EditorArea({
           )}
         </div>
 
-      
-          <TerminalPanel
-      
-          />
-       
+        <TerminalPanel
+          visible={terminalOpen}
+          defaultShell={settings.defaultShell}
+        />
       </div>
     </main>
-
   );
 }

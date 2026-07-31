@@ -15,7 +15,7 @@ const tabs = [
     label: "Source Control",
   },
   {
-    id: "devices",
+    id: "android",
     iconClass: "bi bi-android",
     label: "Source Control",
   },

@@ -40,7 +40,7 @@ func main() {
 		// Safely tears down file system watchers and terminal sessions on exit
 		OnShutdown: func(ctx context.Context) {
 			app.StopWatcher()
-			app.StopTerminal()
+			app.StopAllTerminals()
 		},
 
 		Bind: []interface{}{

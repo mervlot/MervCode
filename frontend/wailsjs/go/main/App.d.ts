@@ -3,6 +3,8 @@
 import {main} from '../models';
 import {types} from '../models';
 
+export function AdbDevices():Promise<Array<main.AdbDevice>>;
+
 export function CheckLanguageTools(arg1:string):Promise<main.ToolStatus>;
 
 export function CreateFile(arg1:string):Promise<void>;
@@ -55,18 +57,20 @@ export function Rename(arg1:string,arg2:string):Promise<void>;
 
 export function RenamePath(arg1:string,arg2:string):Promise<void>;
 
-export function ResizeTerminal(arg1:number,arg2:number):Promise<void>;
+export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function SearchInWorkspace(arg1:string,arg2:string):Promise<Array<types.SearchMatch>>;
 
-export function StartTerminal():Promise<void>;
+export function StartTerminal(arg1:string,arg2:string):Promise<void>;
 
 export function StartWatcher(arg1:string):Promise<void>;
 
-export function StopTerminal():Promise<void>;
+export function StopAllTerminals():Promise<void>;
+
+export function StopTerminal(arg1:string):Promise<void>;
 
 export function StopWatcher():Promise<void>;
 
-export function TerminalInput(arg1:string):Promise<void>;
+export function TerminalInput(arg1:string,arg2:string):Promise<void>;
 
 export function WriteFile(arg1:string,arg2:string):Promise<void>;

@@ -1,5 +1,35 @@
 export namespace main {
 	
+	export class AdbDevice {
+	    serial: string;
+	    state: string;
+	    model: string;
+	    manufacturer: string;
+	    brand: string;
+	    product: string;
+	    device: string;
+	    android: string;
+	    sdk: string;
+	    transportId: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AdbDevice(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.serial = source["serial"];
+	        this.state = source["state"];
+	        this.model = source["model"];
+	        this.manufacturer = source["manufacturer"];
+	        this.brand = source["brand"];
+	        this.product = source["product"];
+	        this.device = source["device"];
+	        this.android = source["android"];
+	        this.sdk = source["sdk"];
+	        this.transportId = source["transportId"];
+	    }
+	}
 	export class ToolStatus {
 	    languageInstalled: boolean;
 	    toolsInstalled: boolean;

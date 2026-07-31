@@ -9,13 +9,32 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-var terminalMu sync.Mutex
+// Windows-only for now (ConPTY). Linux/macOS PTY support comes later.
 
-func (a *App) StartTerminal() error {
+type termSession struct {
+	pty   *conpty.ConPty
+	shell string
+}
+
+var (
+	terminalMu sync.Mutex
+	terminals  = map[string]*termSession{}
+)
+
+const defaultShellFallback = "powershell.exe -NoLogo"
+
+// StartTerminal starts a new PTY session identified by id, running shell
+// (e.g. "cmd.exe", "powershell.exe -NoLogo", "pwsh.exe -NoLogo"). The shell
+// is fixed for the lifetime of this session — it is decided once, at
+// creation, from whatever the caller passes (normally the current "default
+// shell" setting). Changing that setting afterward only affects terminals
+// started after the change; it never changes the shell of an already
+// running session.
+func (a *App) StartTerminal(id string, shell string) error {
 	terminalMu.Lock()
 	defer terminalMu.Unlock()
 
-	if a.pty != nil {
+	if _, exists := terminals[id]; exists {
 		return nil
 	}
 
@@ -23,70 +42,85 @@ func (a *App) StartTerminal() error {
 		return errors.New("ConPTY is not supported on this Windows version")
 	}
 
+	if shell == "" {
+		shell = defaultShellFallback
+	}
+
 	ptyInstance, err := conpty.Start(
-		"powershell.exe -NoLogo",
+		shell,
 		conpty.ConPtyDimensions(120, 30),
 	)
 	if err != nil {
 		return fmt.Errorf("start ConPTY: %w", err)
 	}
 
-	a.pty = ptyInstance
+	terminals[id] = &termSession{pty: ptyInstance, shell: shell}
 
-	go func(ptyInstance *conpty.ConPty) {
+	go func(id string, ptyInstance *conpty.ConPty) {
 		buf := make([]byte, 8192)
 
 		for {
 			n, err := ptyInstance.Read(buf)
 			if err != nil {
-				fmt.Println("terminal stopped:", err)
+				runtime.EventsEmit(a.ctx, "terminal:exit:"+id)
+				terminalMu.Lock()
+				delete(terminals, id)
+				terminalMu.Unlock()
 				return
 			}
 
 			if n > 0 {
-				runtime.EventsEmit(
-					a.ctx,
-					"terminal:output",
-					string(buf[:n]),
-				)
+				runtime.EventsEmit(a.ctx, "terminal:output:"+id, string(buf[:n]))
 			}
 		}
-	}(ptyInstance)
+	}(id, ptyInstance)
 
 	return nil
 }
 
-func (a *App) TerminalInput(input string) error {
+func (a *App) TerminalInput(id string, input string) error {
 	terminalMu.Lock()
-	ptyInstance := a.pty
+	sess := terminals[id]
 	terminalMu.Unlock()
 
-	if ptyInstance == nil {
+	if sess == nil {
 		return errors.New("terminal is not running")
 	}
 
-	_, err := ptyInstance.Write([]byte(input))
+	_, err := sess.pty.Write([]byte(input))
 	return err
 }
 
-func (a *App) ResizeTerminal(cols, rows int) error {
+func (a *App) ResizeTerminal(id string, cols, rows int) error {
 	terminalMu.Lock()
-	ptyInstance := a.pty
+	sess := terminals[id]
 	terminalMu.Unlock()
 
-	if ptyInstance == nil {
+	if sess == nil {
 		return nil
 	}
 
-	return ptyInstance.Resize(cols, rows)
+	return sess.pty.Resize(cols, rows)
 }
 
-func (a *App) StopTerminal() {
+// StopTerminal closes and removes a single terminal session.
+func (a *App) StopTerminal(id string) {
 	terminalMu.Lock()
 	defer terminalMu.Unlock()
 
-	if a.pty != nil {
-		_ = a.pty.Close()
-		a.pty = nil
+	if sess, ok := terminals[id]; ok {
+		_ = sess.pty.Close()
+		delete(terminals, id)
+	}
+}
+
+// StopAllTerminals closes every running terminal session (app shutdown).
+func (a *App) StopAllTerminals() {
+	terminalMu.Lock()
+	defer terminalMu.Unlock()
+
+	for id, sess := range terminals {
+		_ = sess.pty.Close()
+		delete(terminals, id)
 	}
 }
