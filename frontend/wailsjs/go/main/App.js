@@ -18,6 +18,10 @@ export function CreateFolder(arg1) {
   return window['go']['main']['App']['CreateFolder'](arg1);
 }
 
+export function CreateLSPSession(arg1, arg2) {
+  return window['go']['main']['App']['CreateLSPSession'](arg1, arg2);
+}
+
 export function Delete(arg1) {
   return window['go']['main']['App']['Delete'](arg1);
 }
@@ -48,34 +52,6 @@ export function InspectAndReadFile(arg1) {
 
 export function InstallTools(arg1) {
   return window['go']['main']['App']['InstallTools'](arg1);
-}
-
-export function LSPChangeFile(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['LSPChangeFile'](arg1, arg2, arg3, arg4);
-}
-
-export function LSPCloseFile(arg1, arg2) {
-  return window['go']['main']['App']['LSPCloseFile'](arg1, arg2);
-}
-
-export function LSPCompletion(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['LSPCompletion'](arg1, arg2, arg3, arg4);
-}
-
-export function LSPDefinition(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['LSPDefinition'](arg1, arg2, arg3, arg4);
-}
-
-export function LSPHover(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['LSPHover'](arg1, arg2, arg3, arg4);
-}
-
-export function LSPOpenFile(arg1, arg2, arg3) {
-  return window['go']['main']['App']['LSPOpenFile'](arg1, arg2, arg3);
-}
-
-export function LSPReferences(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['LSPReferences'](arg1, arg2, arg3, arg4);
 }
 
 export function OpenSettingsWindow() {
@@ -128,6 +104,10 @@ export function StartWatcher(arg1) {
 
 export function StopAllTerminals() {
   return window['go']['main']['App']['StopAllTerminals']();
+}
+
+export function StopLSPBridge() {
+  return window['go']['main']['App']['StopLSPBridge']();
 }
 
 export function StopTerminal(arg1) {

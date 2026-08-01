@@ -41,6 +41,7 @@ func main() {
 		OnShutdown: func(ctx context.Context) {
 			app.StopWatcher()
 			app.StopAllTerminals()
+			app.StopLSPBridge()
 		},
 
 		Bind: []interface{}{

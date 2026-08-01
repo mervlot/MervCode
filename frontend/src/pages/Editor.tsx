@@ -3,7 +3,10 @@ import * as monaco from "monaco-editor";
 
 import { setupMonaco } from "../editor/monaco/setup";
 import { applyLanguageFeatures } from "../editor/monaco/apply";
-import { toMonacoOptions, toModelOptions } from "../editor/monaco/toMonacoOptions";
+import {
+  toMonacoOptions,
+  toModelOptions,
+} from "../editor/monaco/toMonacoOptions";
 import { getCustomActions } from "../editor/keybinding";
 import { useTheme } from "../contexts/ThemeContext";
 import type { EditorSettings } from "../types";
@@ -17,6 +20,7 @@ interface EditorProps {
   onReady?: (editor: monaco.editor.IStandaloneCodeEditor) => void;
   onSave?: (content: string) => void | Promise<void>;
   onChange?: (content: string) => void;
+  rootPath?: string;
 }
 
 export default function Editor({
@@ -28,6 +32,7 @@ export default function Editor({
   onReady,
   onSave,
   onChange,
+  rootPath,
 }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -35,6 +40,7 @@ export default function Editor({
   const onSaveRef = useRef(onSave);
   const onChangeRef = useRef(onChange);
   const settingsRef = useRef(settings);
+  const rootPathRef = useRef(rootPath);
   const lspCleanupRef = useRef<(() => void) | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { theme } = useTheme();
@@ -107,7 +113,8 @@ export default function Editor({
 
       lspCleanupRef.current?.();
       lspCleanupRef.current =
-        applyLanguageFeatures(langKey, editor, model) ?? null;
+        applyLanguageFeatures(langKey, editor, model, rootPathRef.current) ??
+        null;
 
       editor.onDidChangeCursorPosition((e) => {
         onCursorChange?.({
@@ -160,6 +167,10 @@ export default function Editor({
   }, [path]);
 
   useEffect(() => {
+    rootPathRef.current = rootPath;
+  }, [rootPath]);
+
+  useEffect(() => {
     const model = modelRef.current;
     if (!model) return;
 
@@ -177,7 +188,8 @@ export default function Editor({
 
     lspCleanupRef.current?.();
     lspCleanupRef.current =
-      applyLanguageFeatures(langKey, editor, model) ?? null;
+      applyLanguageFeatures(langKey, editor, model, rootPathRef.current) ??
+      null;
   }, [langKey]);
 
   useEffect(() => {

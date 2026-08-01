@@ -14,5 +14,6 @@ export interface MonacoLanguage {
   lsp?(
     editor: monaco.editor.IStandaloneCodeEditor,
     model: monaco.editor.ITextModel,
+    rootPath?: string,
   ): (() => void) | void;
 }

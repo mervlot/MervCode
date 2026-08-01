@@ -52,6 +52,59 @@ func init() {
 				"gofmt": "Comes with Go runtime",
 			},
 		},
+		"typescript": {
+			ID:   "typescript",
+			Name: "TypeScript / JavaScript",
+			LSP: &LSPConfig{
+				Command: "typescript-language-server",
+				Args:    []string{"--stdio"},
+			},
+			Markers: []string{
+				"tsconfig.json",
+				"jsconfig.json",
+				"package.json",
+			},
+			RuntimeBinary:     "node",
+			RuntimeInstallURL: "https://nodejs.org/",
+			ToolInstallMethods: map[string]string{
+				"typescript-language-server": "npm install -g typescript typescript-language-server",
+			},
+		},
+		"java": {
+			ID:   "java",
+			Name: "Java",
+			LSP: &LSPConfig{
+				// Eclipse JDT Language Server. Most distributions
+				// (Homebrew, Scoop, the official download) install a
+				// `jdtls` wrapper script that already resolves its own
+				// -configuration/-data paths, so no extra args are
+				// required here.
+				Command: "jdtls",
+				Args:    []string{},
+			},
+			Markers:           []string{"pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"},
+			RuntimeBinary:     "java",
+			RuntimeInstallURL: "https://adoptium.net/",
+			ToolInstallMethods: map[string]string{
+				"jdtls": "Homebrew: brew install jdtls | Scoop: scoop install jdtls | Manual: https://download.eclipse.org/jdtls/",
+			},
+		},
+		"kotlin": {
+			ID:   "kotlin",
+			Name: "Kotlin",
+			LSP: &LSPConfig{
+				// fwcd/kotlin-language-server. Ships as a wrapper script
+				// (kotlin-language-server / .bat on Windows).
+				Command: "kotlin-language-server",
+				Args:    []string{},
+			},
+			Markers:           []string{"build.gradle.kts", "build.gradle", "settings.gradle.kts", "settings.gradle"},
+			RuntimeBinary:     "java",
+			RuntimeInstallURL: "https://adoptium.net/",
+			ToolInstallMethods: map[string]string{
+				"kotlin-language-server": "Homebrew: brew install kotlin-language-server | Scoop: scoop install kotlin-language-server | Manual: https://github.com/fwcd/kotlin-language-server/releases",
+			},
+		},
 	}
 }
 

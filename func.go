@@ -28,17 +28,10 @@ type App struct {
 	watcherCancel context.CancelFunc
 	watcherMu     sync.Mutex
 	currentRoot   string
-
-	lspMu      sync.Mutex
-	lspClients map[string]*lspClient
-	lspRoots   map[string]string
 }
 
 func NewApp() *App {
-	return &App{
-		lspClients: make(map[string]*lspClient),
-		lspRoots:   make(map[string]string),
-	}
+	return &App{}
 }
 
 func (a *App) Startup(ctx context.Context) {
@@ -52,9 +45,6 @@ func (a *App) StartWatcher(rootPath string) error {
 
 	// Stop any existing watchers first
 	a.stopWatcherInternal()
-
-	// Shut down LSP clients from the previous workspace
-	a.closeAllLSPClients()
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -280,10 +270,6 @@ func (a *App) stopWatcherInternal() {
 		a.watcher = nil
 	}
 	a.currentRoot = ""
-
-	a.lspMu.Lock()
-	a.lspRoots = make(map[string]string)
-	a.lspMu.Unlock()
 }
 
 func (a *App) WriteFile(path string, content string) error {
@@ -556,30 +542,30 @@ func (a *App) OpenSettingsWindow() error {
 // LSP — Language Server Protocol proxy
 // ============================================================
 
-func (a *App) LSPOpenFile(lang, path, content string) error {
-	return a.lspOpenFile(lang, path, content)
-}
+// func (a *App) LSPOpenFile(lang, path, content string) error {
+// 	return a.lspOpenFile(lang, path, content)
+// }
 
-func (a *App) LSPChangeFile(lang, path, content string, version int) error {
-	return a.lspChangeFile(lang, path, content, version)
-}
+// func (a *App) LSPChangeFile(lang, path, content string, version int) error {
+// 	return a.lspChangeFile(lang, path, content, version)
+// }
 
-func (a *App) LSPCloseFile(lang, path string) error {
-	return a.lspCloseFile(lang, path)
-}
+// func (a *App) LSPCloseFile(lang, path string) error {
+// 	return a.lspCloseFile(lang, path)
+// }
 
-func (a *App) LSPHover(lang, path string, line, col int) (*types.LSPHoverResult, error) {
-	return a.lspHover(lang, path, line, col)
-}
+// func (a *App) LSPHover(lang, path string, line, col int) (*types.LSPHoverResult, error) {
+// 	return a.lspHover(lang, path, line, col)
+// }
 
-func (a *App) LSPCompletion(lang, path string, line, col int) ([]types.LSPCompletionItem, error) {
-	return a.lspCompletion(lang, path, line, col)
-}
+// func (a *App) LSPCompletion(lang, path string, line, col int) ([]types.LSPCompletionItem, error) {
+// 	return a.lspCompletion(lang, path, line, col)
+// }
 
-func (a *App) LSPDefinition(lang, path string, line, col int) (*types.LSPLocation, error) {
-	return a.lspDefinition(lang, path, line, col)
-}
+// func (a *App) LSPDefinition(lang, path string, line, col int) (*types.LSPLocation, error) {
+// 	return a.lspDefinition(lang, path, line, col)
+// }
 
-func (a *App) LSPReferences(lang, path string, line, col int) ([]types.LSPLocation, error) {
-	return a.lspReferences(lang, path, line, col)
-}
+// func (a *App) LSPReferences(lang, path string, line, col int) ([]types.LSPLocation, error) {
+// 	return a.lspReferences(lang, path, line, col)
+// }

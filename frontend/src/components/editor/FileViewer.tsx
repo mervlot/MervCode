@@ -12,9 +12,13 @@ interface FileViewerProps {
   settings: EditorSettings;
   onSettingsChange: (patch: Partial<EditorSettings>) => void;
   onCursorChange: (pos: { line: number; column: number }) => void;
-  onEditorReady: (path: string, editor: monaco.editor.IStandaloneCodeEditor) => void;
+  onEditorReady: (
+    path: string,
+    editor: monaco.editor.IStandaloneCodeEditor,
+  ) => void;
   onChange: (path: string, content: string) => void;
   onSave: (path: string, content: string) => void | Promise<void>;
+  rootPath?: string;
 }
 
 export default function FileViewer({
@@ -26,11 +30,15 @@ export default function FileViewer({
   onEditorReady,
   onChange,
   onSave,
+  rootPath,
 }: FileViewerProps) {
   return (
     <ErrorBoundary label={tab.name} resetKey={tab.path}>
       {tab.category === "settings" ? (
-        <SettingsPanel settings={settings} onSettingsChange={onSettingsChange} />
+        <SettingsPanel
+          settings={settings}
+          onSettingsChange={onSettingsChange}
+        />
       ) : tab.category === "image" ? (
         <ImageViewer
           path={tab.path}
@@ -48,11 +56,7 @@ export default function FileViewer({
       ) : tab.category === "audio" ? (
         <div className='flex h-full flex-col items-center justify-center bg-canvas p-4 gap-4'>
           <i className='bi bi-music-note-beamed text-4xl text-tertiary' />
-          <audio
-            src={tab.content}
-            controls
-            className='w-80'
-          />
+          <audio src={tab.content} controls className='w-80' />
         </div>
       ) : tab.category === "pdf" ? (
         <iframe
@@ -63,16 +67,11 @@ export default function FileViewer({
       ) : tab.category === "binary" ? (
         <div className='flex h-full flex-col items-center justify-center bg-canvas gap-2 text-tertiary'>
           <i className='bi bi-file-earmark text-4xl text-tertiary' />
-          <p className='text-xs'>
-            Binary file can't be displayed.
-          </p>
+          <p className='text-xs'>Binary file can't be displayed.</p>
         </div>
       ) : tab.category === "spreadsheet" &&
         (tab.name.endsWith(".csv") || tab.name.endsWith(".tsv")) ? (
-        <SpreadSheetViewer
-          content={tab.content ?? ""}
-          name={tab.name}
-        />
+        <SpreadSheetViewer content={tab.content ?? ""} name={tab.name} />
       ) : (
         <Editor
           doc={tab.content ?? ""}
@@ -83,6 +82,7 @@ export default function FileViewer({
           onReady={(editor) => onEditorReady(tab.path, editor)}
           onChange={(content) => onChange(tab.path, content)}
           onSave={async (newContent) => onSave(tab.path, newContent)}
+          rootPath={rootPath}
         />
       )}
     </ErrorBoundary>

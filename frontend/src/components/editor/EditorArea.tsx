@@ -57,6 +57,7 @@ interface EditorAreaProps {
   onChange: (path: string, content: string) => void;
   onSave: (path: string, content: string) => void | Promise<void>;
   onOpenFolder: () => void;
+  rootPath?: string;
 }
 
 export default function EditorArea({
@@ -91,6 +92,7 @@ export default function EditorArea({
   onChange,
   onSave,
   onOpenFolder,
+  rootPath,
 }: EditorAreaProps) {
   const [toolchainLang, setToolchainLang] = useState<string | null>(null);
 
@@ -170,6 +172,7 @@ export default function EditorArea({
                   onEditorReady={onEditorReady}
                   onChange={onChange}
                   onSave={onSave}
+                  rootPath={rootPath}
                 />
               </div>
             ))

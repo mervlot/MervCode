@@ -11,6 +11,8 @@ export function CreateFile(arg1:string):Promise<void>;
 
 export function CreateFolder(arg1:string):Promise<void>;
 
+export function CreateLSPSession(arg1:string,arg2:string):Promise<string>;
+
 export function Delete(arg1:string):Promise<void>;
 
 export function DeletePath(arg1:string):Promise<void>;
@@ -26,20 +28,6 @@ export function Greet(arg1:string):Promise<string>;
 export function InspectAndReadFile(arg1:string):Promise<types.FileResponse>;
 
 export function InstallTools(arg1:string):Promise<void>;
-
-export function LSPChangeFile(arg1:string,arg2:string,arg3:string,arg4:number):Promise<void>;
-
-export function LSPCloseFile(arg1:string,arg2:string):Promise<void>;
-
-export function LSPCompletion(arg1:string,arg2:string,arg3:number,arg4:number):Promise<Array<types.LSPCompletionItem>>;
-
-export function LSPDefinition(arg1:string,arg2:string,arg3:number,arg4:number):Promise<types.LSPLocation>;
-
-export function LSPHover(arg1:string,arg2:string,arg3:number,arg4:number):Promise<types.LSPHoverResult>;
-
-export function LSPOpenFile(arg1:string,arg2:string,arg3:string):Promise<void>;
-
-export function LSPReferences(arg1:string,arg2:string,arg3:number,arg4:number):Promise<Array<types.LSPLocation>>;
 
 export function OpenSettingsWindow():Promise<void>;
 
@@ -66,6 +54,8 @@ export function StartTerminal(arg1:string,arg2:string):Promise<void>;
 export function StartWatcher(arg1:string):Promise<void>;
 
 export function StopAllTerminals():Promise<void>;
+
+export function StopLSPBridge():Promise<void>;
 
 export function StopTerminal(arg1:string):Promise<void>;
 

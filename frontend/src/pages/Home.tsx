@@ -196,7 +196,7 @@ export default function Home() {
   }
 
   return (
-    <div className="w-full h-screen flex flex-col bg-app-surface overflow-hidden select-none">
+    <div className='w-full h-screen flex flex-col bg-app-surface overflow-hidden select-none'>
       {}
       <Header
         onRequestQuit={requestQuit}
@@ -214,10 +214,9 @@ export default function Home() {
         paletteOpen={paletteOpen}
         setPaletteOpen={setPaletteOpen}
         onOpenSettingsTab={openSettingsTab}
-
         rootPath={workspaceRoot?.path}
       />
-      <div className="flex-1 w-full flex min-h-0">
+      <div className='flex-1 w-full flex min-h-0'>
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -243,6 +242,7 @@ export default function Home() {
           language={language}
           settings={settings}
           onSettingsChange={updateSettings}
+          rootPath={workspaceRoot?.path}
           cursor={cursor}
           setCursor={setCursor}
           activeFile={tab.activeFile}

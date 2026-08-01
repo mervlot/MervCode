@@ -5,6 +5,7 @@ export function applyLanguageFeatures(
   language: string,
   editor: monaco.editor.IStandaloneCodeEditor,
   model: monaco.editor.ITextModel,
+  rootPath?: string,
 ): (() => void) | void {
   const lang = registry[language];
 
@@ -13,7 +14,7 @@ export function applyLanguageFeatures(
   lang.setup?.();
   lang.diagnostics?.(model);
 
-  const lspCleanup = lang.lsp?.(editor, model);
+  const lspCleanup = lang.lsp?.(editor, model, rootPath);
 
   if (lang.formatter) {
     const formatterDisposable =
