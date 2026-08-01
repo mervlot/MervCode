@@ -21,6 +21,8 @@ export function FolderDialog():Promise<string>;
 
 export function FormatDocument(arg1:string,arg2:string,arg3:string):Promise<string>;
 
+export function GetLanguageProfile(arg1:string):Promise<main.LanguageProfile>;
+
 export function GitStatus(arg1:string):Promise<types.GitStatusResult>;
 
 export function Greet(arg1:string):Promise<string>;
@@ -28,6 +30,12 @@ export function Greet(arg1:string):Promise<string>;
 export function InspectAndReadFile(arg1:string):Promise<types.FileResponse>;
 
 export function InstallTools(arg1:string):Promise<void>;
+
+export function InvalidateWorkspaceCache():Promise<void>;
+
+export function KillLSPServer(arg1:string):Promise<void>;
+
+export function ListLSPServers():Promise<Array<main.LSPServerInfo>>;
 
 export function OpenSettingsWindow():Promise<void>;
 
@@ -46,6 +54,10 @@ export function Rename(arg1:string,arg2:string):Promise<void>;
 export function RenamePath(arg1:string,arg2:string):Promise<void>;
 
 export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
+
+export function ResolveFileReference(arg1:string,arg2:string):Promise<main.ResolvedReference>;
+
+export function ResolveProjectRoot(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function SearchInWorkspace(arg1:string,arg2:string):Promise<Array<types.SearchMatch>>;
 

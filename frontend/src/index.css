@@ -1,10 +1,50 @@
 @import "tailwindcss";
+
+/* Every Monaspace variant actually shipped under assets/fonts/ gets its
+   own @font-face here, matching the family names EditorSettings.fontFamily
+   can reference. Previously only "Monaspace" (Krypton) was declared while
+   the default editor font was named "Monaspace Argon" - a font with no
+   matching @font-face at all, despite the file existing on disk. Combined
+   with the old `!important` font-family override further down (removed -
+   see the .monaco-editor rule below), that mismatch let Monaco's internal
+   font-metrics cache (keyed off the fontFamily option) diverge from
+   whatever the browser actually rendered, which is what causes the caret
+   to visually land in the wrong place while the logical cursor position
+   stays correct. */
 @font-face {
-  font-family: "Monaspace";
-  src: url("./assets/fonts/Variable Web Fonts/Monaspace Krypton/Monaspace Krypton Var.woff2")
-    format("woff2");
-  font-weight: 100 900;
-  font-style: normal;
+    font-family: "Monaspace Argon";
+    src: url("./assets/fonts/Variable Web Fonts/Monaspace Argon/Monaspace Argon Var.woff2")
+        format("woff2");
+    font-weight: 100 900;
+    font-style: normal;
+}
+@font-face {
+    font-family: "Monaspace Krypton";
+    src: url("./assets/fonts/Variable Web Fonts/Monaspace Krypton/Monaspace Krypton Var.woff2")
+        format("woff2");
+    font-weight: 100 900;
+    font-style: normal;
+}
+@font-face {
+    font-family: "Monaspace Neon";
+    src: url("./assets/fonts/Variable Web Fonts/Monaspace Neon/Monaspace Neon Var.woff2")
+        format("woff2");
+    font-weight: 100 900;
+    font-style: normal;
+}
+@font-face {
+    font-family: "Monaspace Radon";
+    src: url("./assets/fonts/Variable Web Fonts/Monaspace Radon/Monaspace Radon Var.woff2")
+        format("woff2");
+    font-weight: 100 900;
+    font-style: normal;
+}
+@font-face {
+    font-family: "Monaspace Xenon";
+    src: url("./assets/fonts/Variable Web Fonts/Monaspace Xenon/Monaspace Xenon Var.woff2")
+        format("woff2");
+    font-weight: 100 900;
+    font-style: normal;
 }
 
 /* ============================================================
@@ -13,253 +53,279 @@
 :root,
 :root[data-theme="dark"],
 [data-theme="dark"] {
-  color-scheme: dark;
+    color-scheme: dark;
 
-  --bg-app: #000000;
-  --bg-canvas: #0d0d0d;
-  --bg-panel: #0a0a0a;
-  --bg-panel-alt: #0a0a0a;
-  --bg-surface: #141414;
-  --bg-surface-2: #1a1a1a;
-  --bg-chip: #1a1a1a;
-  --bg-tab: #0a0a0a;
-  --bg-tab-active: #111111;
-  --bg-hover: rgba(255, 255, 255, 0.05);
-  --bg-active: rgba(255, 255, 255, 0.08);
+    --bg-app: #000000;
+    --bg-canvas: #0d0d0d;
+    --bg-panel: #0a0a0a;
+    --bg-panel-alt: #0a0a0a;
+    --bg-surface: #141414;
+    --bg-surface-2: #1a1a1a;
+    --bg-chip: #1a1a1a;
+    --bg-tab: #0a0a0a;
+    --bg-tab-active: #111111;
+    --bg-hover: rgba(255, 255, 255, 0.05);
+    --bg-active: rgba(255, 255, 255, 0.08);
 
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.12);
-  --border-focus: rgba(220, 20, 60, 0.4);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.12);
+    --border-focus: rgba(220, 20, 60, 0.4);
 
-  --text-primary: rgba(255, 255, 255, 0.92);
-  --text-secondary: rgba(255, 255, 255, 0.6);
-  --text-tertiary: rgba(255, 255, 255, 0.38);
-  --text-faint: rgba(255, 255, 255, 0.2);
+    --text-primary: rgba(255, 255, 255, 0.92);
+    --text-secondary: rgba(255, 255, 255, 0.6);
+    --text-tertiary: rgba(255, 255, 255, 0.38);
+    --text-faint: rgba(255, 255, 255, 0.2);
 
-  --accent: #DC143C;
-  --accent-strong: #E8173D;
-  --accent-soft: rgba(220, 20, 60, 0.12);
-  --accent-soft-strong: rgba(220, 20, 60, 0.2);
-  --accent-border: rgba(220, 20, 60, 0.25);
+    --accent: #dc143c;
+    --accent-strong: #e8173d;
+    --accent-soft: rgba(220, 20, 60, 0.12);
+    --accent-soft-strong: rgba(220, 20, 60, 0.2);
+    --accent-border: rgba(220, 20, 60, 0.25);
 
-  --danger: #DC143C;
-  --danger-soft: rgba(220, 20, 60, 0.12);
-  --success: #22c55e;
-  --success-soft: rgba(34, 197, 94, 0.12);
-  --warning: #eab308;
+    --danger: #dc143c;
+    --danger-soft: rgba(220, 20, 60, 0.12);
+    --success: #22c55e;
+    --success-soft: rgba(34, 197, 94, 0.12);
+    --warning: #eab308;
 
-  --scrollbar-track: #0a0a0a;
-  --scrollbar-thumb: #2a2a2a;
-  --scrollbar-thumb-hover: #3a3a3a;
+    --scrollbar-track: #0a0a0a;
+    --scrollbar-thumb: #2a2a2a;
+    --scrollbar-thumb-hover: #3a3a3a;
 
-  --shadow-color: rgba(0, 0, 0, 0.6);
+    --shadow-color: rgba(0, 0, 0, 0.6);
 }
 
 :root[data-theme="light"] {
-  color-scheme: light;
+    color-scheme: light;
 
-  --bg-app: #f5f5f5;
-  --bg-canvas: #ffffff;
-  --bg-panel: #f0f0f0;
-  --bg-panel-alt: #f0f0f0;
-  --bg-surface: #ffffff;
-  --bg-surface-2: #f5f5f5;
-  --bg-chip: #e8e8e8;
-  --bg-tab: #f0f0f0;
-  --bg-tab-active: #ffffff;
-  --bg-hover: rgba(0, 0, 0, 0.05);
-  --bg-active: rgba(0, 0, 0, 0.08);
+    --bg-canvas: #FAFAFA;
+    --bg-panel:  #F4F4F5;
+    --bg-app:    #EFEFF1;
+    --bg-panel-alt: #f0f0f0;
+    --bg-surface: #ffffff;
+    --bg-surface-2: #f5f5f5;
+    --bg-chip: #e8e8e8;
+    --bg-tab: #f0f0f0;
+    --bg-tab-active: #ffffff;
+    --bg-hover: rgba(0, 0, 0, 0.05);
+    --bg-active: rgba(0, 0, 0, 0.08);
 
-  --border: rgba(0, 0, 0, 0.1);
-  --border-strong: rgba(0, 0, 0, 0.16);
-  --border-focus: rgba(220, 20, 60, 0.35);
+    --border: rgba(0, 0, 0, 0.1);
+    --border-strong: rgba(0, 0, 0, 0.16);
+    --border-focus: rgba(220, 20, 60, 0.35);
 
-  --text-primary: rgba(15, 15, 25, 0.9);
-  --text-secondary: rgba(15, 15, 25, 0.6);
-  --text-tertiary: rgba(15, 15, 25, 0.4);
-  --text-faint: rgba(15, 15, 25, 0.22);
+    /* Neutral near-black (no blue/navy cast) at higher opacity stops than
+       the dark theme's white-on-black equivalents. Light backgrounds
+       compress perceptual contrast at the light end far more than dark
+       backgrounds do at the dark end, so reusing the dark theme's alpha
+       values here (0.6/0.4/0.22) produced washed-out, low-contrast,
+       slightly purple-tinted gray text - recalibrated for real contrast
+       against a white/near-white surface. */
+    --text-primary: rgba(20, 20, 20, 0.92);
+    --text-secondary: rgba(20, 20, 20, 0.72);
+    --text-tertiary: rgba(20, 20, 20, 0.56);
+    --text-faint: rgba(20, 20, 20, 0.38);
 
-  --accent: #B91030;
-  --accent-strong: #DC143C;
-  --accent-soft: rgba(185, 16, 48, 0.1);
-  --accent-soft-strong: rgba(185, 16, 48, 0.18);
-  --accent-border: rgba(185, 16, 48, 0.25);
+    --accent: #b91030;
+    --accent-strong: #dc143c;
+    --accent-soft: rgba(185, 16, 48, 0.1);
+    --accent-soft-strong: rgba(185, 16, 48, 0.18);
+    --accent-border: rgba(185, 16, 48, 0.25);
 
-  --danger: #B91030;
-  --danger-soft: rgba(185, 16, 48, 0.1);
-  --success: #16a34a;
-  --success-soft: rgba(22, 163, 74, 0.1);
-  --warning: #ca8a04;
+    --danger: #b91030;
+    --danger-soft: rgba(185, 16, 48, 0.1);
+    --success: #16a34a;
+    --success-soft: rgba(22, 163, 74, 0.1);
+    --warning: #ca8a04;
 
-  --scrollbar-track: #e8e8e8;
-  --scrollbar-thumb: #c0c0c0;
-  --scrollbar-thumb-hover: #a0a0a0;
+    --scrollbar-track: #e8e8e8;
+    --scrollbar-thumb: #c0c0c0;
+    --scrollbar-thumb-hover: #a0a0a0;
 
-  --shadow-color: rgba(0, 0, 0, 0.1);
+    --shadow-color: rgba(0, 0, 0, 0.1);
 }
 
 .bg-app-surface {
-  background-color: var(--bg-app);
+    background-color: var(--bg-app);
 }
 .bg-canvas {
-  background-color: var(--bg-canvas);
+    background-color: var(--bg-canvas);
 }
 .bg-panel {
-  background-color: var(--bg-panel);
+    background-color: var(--bg-panel);
 }
 .bg-panel-alt {
-  background-color: var(--bg-panel-alt);
+    background-color: var(--bg-panel-alt);
 }
 .bg-surface {
-  background-color: var(--bg-surface);
+    background-color: var(--bg-surface);
 }
 .bg-surface-2 {
-  background-color: var(--bg-surface-2);
+    background-color: var(--bg-surface-2);
 }
 .bg-chip {
-  background-color: var(--bg-chip);
+    background-color: var(--bg-chip);
 }
 .bg-tab {
-  background-color: var(--bg-tab);
+    background-color: var(--bg-tab);
 }
 .bg-tab-active {
-  background-color: var(--bg-tab-active);
+    background-color: var(--bg-tab-active);
 }
 .hover-bg:hover {
-  background-color: var(--bg-hover);
+    background-color: var(--bg-hover);
 }
 .active-bg {
-  background-color: var(--bg-active);
+    background-color: var(--bg-active);
 }
 
 .border-subtle {
-  border-color: var(--border);
+    border-color: var(--border);
 }
 .border-subtle-strong {
-  border-color: var(--border-strong);
+    border-color: var(--border-strong);
 }
 
 .text-primary {
-  color: var(--text-primary);
+    color: var(--text-primary);
 }
 .text-secondary {
-  color: var(--text-secondary);
+    color: var(--text-secondary);
 }
 .text-tertiary {
-  color: var(--text-tertiary);
+    color: var(--text-tertiary);
 }
 .text-faint {
-  color: var(--text-faint);
+    color: var(--text-faint);
 }
 .text-accent {
-  color: var(--accent);
+    color: var(--accent);
 }
 
 .bg-accent-soft {
-  background-color: var(--accent-soft);
+    background-color: var(--accent-soft);
 }
 .bg-accent-soft-strong {
-  background-color: var(--accent-soft-strong);
+    background-color: var(--accent-soft-strong);
 }
 .border-accent {
-  border-color: var(--accent-border);
+    border-color: var(--accent-border);
+}
+
+.text-danger {
+    color: var(--danger);
+}
+.bg-danger-soft {
+    background-color: var(--danger-soft);
 }
 
 .shadow-app {
-  box-shadow: 0 8px 24px var(--shadow-color);
+    box-shadow: 0 8px 24px var(--shadow-color);
 }
 
 html,
 body,
 #root {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  overflow: hidden;
-  background-color: var(--bg-app);
-  color: var(--text-primary);
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
 }
 
 body {
-  transition: background-color 0.15s ease;
+    transition: background-color 0.15s ease;
 }
 
-.monaco-editor,
-.monaco-editor * {
-  font-family: "Monaspace" !important;
-  font-feature-settings:
-    "calt", "liga", "ss01", "ss02", "ss03", "ss04", "ss05", "ss06", "ss07",
-    "ss08", "ss09";
-}
+/* No font-family override here anymore - Monaco is given fontFamily as an
+   editor OPTION (see editor/monaco/toMonacoOptions.ts / EditorSettings),
+   which it applies consistently to both its visible text nodes and its
+   internal font-measurement nodes. Overriding font-family here with
+   !important used to win over Monaco's own inline style on those same
+   measurement nodes, silently decoupling what Monaco measured from what
+   actually rendered - the root cause of the caret/text misalignment bug.
+
+   font-feature-settings used to be forced here unconditionally (including
+   "calt"/"liga", the actual ligature features) so Monaspace's stylistic
+   sets (ss01-ss09) would render even though Monaco's own boolean
+   fontLigatures option doesn't know about them. That made the "Font
+   Ligatures" setting a no-op: Monaco applies font-feature-settings as an
+   inline style on the same element, and inline styles always beat a
+   stylesheet rule, so toggling the setting only ever fought this rule
+   instead of changing what rendered. toMonacoOptions.ts now passes
+   fontLigatures as a full feature-settings string (calt/liga gated by the
+   setting, ss01-ss09 always on) as the single source of truth, so no CSS
+   override is needed here anymore. */
 
 .draggable {
-  --wails-draggable: drag;
+    --wails-draggable: drag;
 }
 
 .no-drag {
-  --wails-draggable: no-drag;
+    --wails-draggable: no-drag;
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+    width: 8px;
+    height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+    background: var(--scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 4px;
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
+    background: var(--scrollbar-thumb-hover);
 }
 
 * {
-  box-sizing: border-box;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 @keyframes overlay-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 .animate-overlay-in {
-  animation: overlay-in 0.1s ease-out;
+    animation: overlay-in 0.1s ease-out;
 }
 
 /* xterm.js overrides for MervCode deep black theme */
 .xterm {
-  padding: 4px 8px;
+    padding: 4px 8px;
 }
 .xterm-viewport {
-  background-color: #000000 !important;
+    background-color: #000000 !important;
 }
 .xterm-viewport::-webkit-scrollbar {
-  width: 8px;
+    width: 8px;
 }
 .xterm-viewport::-webkit-scrollbar-track {
-  background: #000000;
+    background: #000000;
 }
 .xterm-viewport::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
 }
 .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.2);
 }
 .xterm-cursor-layer {
-  z-index: 10;
+    z-index: 10;
 }
 
 .xterm-screen {
-  height: 100% !important;
+    height: 100% !important;
 }

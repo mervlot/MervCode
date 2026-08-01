@@ -38,6 +38,10 @@ export function FormatDocument(arg1, arg2, arg3) {
   return window['go']['main']['App']['FormatDocument'](arg1, arg2, arg3);
 }
 
+export function GetLanguageProfile(arg1) {
+  return window['go']['main']['App']['GetLanguageProfile'](arg1);
+}
+
 export function GitStatus(arg1) {
   return window['go']['main']['App']['GitStatus'](arg1);
 }
@@ -52,6 +56,18 @@ export function InspectAndReadFile(arg1) {
 
 export function InstallTools(arg1) {
   return window['go']['main']['App']['InstallTools'](arg1);
+}
+
+export function InvalidateWorkspaceCache() {
+  return window['go']['main']['App']['InvalidateWorkspaceCache']();
+}
+
+export function KillLSPServer(arg1) {
+  return window['go']['main']['App']['KillLSPServer'](arg1);
+}
+
+export function ListLSPServers() {
+  return window['go']['main']['App']['ListLSPServers']();
 }
 
 export function OpenSettingsWindow() {
@@ -88,6 +104,14 @@ export function RenamePath(arg1, arg2) {
 
 export function ResizeTerminal(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeTerminal'](arg1, arg2, arg3);
+}
+
+export function ResolveFileReference(arg1, arg2) {
+  return window['go']['main']['App']['ResolveFileReference'](arg1, arg2);
+}
+
+export function ResolveProjectRoot(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResolveProjectRoot'](arg1, arg2, arg3);
 }
 
 export function SearchInWorkspace(arg1, arg2) {

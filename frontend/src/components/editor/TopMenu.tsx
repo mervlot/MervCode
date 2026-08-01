@@ -5,9 +5,9 @@ interface TopMenuProps {
   saveActiveFile: () => Promise<void>;
   toggleTheme: () => void;
   terminalOpen: boolean;
-  setTerminalOpen: (v: boolean) => void;
+  setTerminalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   sidebarCollapsed: boolean;
-  setSidebarCollapsed: (v: boolean) => void;
+  setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   setPaletteOpen: (v: boolean) => void;
   closeAllTabs: () => void;
   activePath: string | null;
@@ -146,31 +146,42 @@ export default function TopMenu({
   ];
 
   return (
-    <div ref={ref} className='relative no-drag w-12 flex items-center justify-center shrink-0'>
+    <div
+      ref={ref}
+      className="relative no-drag w-12 flex items-center justify-center shrink-0"
+    >
       <button
         onClick={() => setOpen((v) => !v)}
-        className='w-9 h-9 flex items-center justify-center text-tertiary hover:text-primary hover:bg-hover transition-colors rounded'
-        title='Menu'
+        className="w-9 h-9 flex items-center justify-center text-tertiary hover:text-primary hover:bg-hover transition-colors rounded"
+        title="Menu"
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        >
           <path d="M3 4h10M3 8h10M3 12h10" />
         </svg>
       </button>
 
       {open && (
-        <div className='absolute top-full left-1 mt-0.5 w-52 py-1 rounded-lg border border-subtle-strong bg-surface shadow-app z-50'>
+        <div className="absolute top-full left-1 mt-0.5 w-52 py-1 rounded-lg border border-subtle-strong bg-surface shadow-app z-50">
           {sections.map((section, si) => (
             <div key={si}>
-              {si > 0 && <div className='mx-2 my-1 h-px bg-white/8' />}
+              {si > 0 && <div className="mx-2 my-1 h-px bg-white/8" />}
               {section.items.map((item) => (
                 <button
                   key={item.label}
                   onClick={item.run}
-                  className='flex w-full items-center justify-between px-3 py-1.5 text-left text-[12.5px] text-secondary hover:text-primary hover:bg-hover transition-colors'
+                  className="flex w-full items-center justify-between px-3 py-1.5 text-left text-[12.5px] text-secondary hover:text-primary hover:bg-hover transition-colors"
                 >
                   <span>{item.label}</span>
                   {item.shortcut && (
-                    <kbd className='rounded border border-subtle-strong px-1.5 py-0.5 text-[10px] text-tertiary'>
+                    <kbd className="rounded border border-subtle-strong px-1.5 py-0.5 text-[10px] text-tertiary">
                       {item.shortcut}
                     </kbd>
                   )}

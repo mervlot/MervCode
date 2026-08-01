@@ -18,7 +18,7 @@ interface FileViewerProps {
   ) => void;
   onChange: (path: string, content: string) => void;
   onSave: (path: string, content: string) => void | Promise<void>;
-  rootPath?: string;
+  rootPath?: string | undefined;
 }
 
 export default function FileViewer({
@@ -46,28 +46,28 @@ export default function FileViewer({
           content={tab.content ?? ""}
         />
       ) : tab.category === "video" ? (
-        <div className='flex h-full items-center justify-center bg-canvas p-4'>
+        <div className="flex h-full items-center justify-center bg-canvas p-4">
           <video
             src={tab.content}
             controls
-            className='max-h-full max-w-full rounded shadow-app'
+            className="max-h-full max-w-full rounded shadow-app"
           />
         </div>
       ) : tab.category === "audio" ? (
-        <div className='flex h-full flex-col items-center justify-center bg-canvas p-4 gap-4'>
-          <i className='bi bi-music-note-beamed text-4xl text-tertiary' />
-          <audio src={tab.content} controls className='w-80' />
+        <div className="flex h-full flex-col items-center justify-center bg-canvas p-4 gap-4">
+          <i className="bi bi-music-note-beamed text-4xl text-tertiary" />
+          <audio src={tab.content} controls className="w-80" />
         </div>
       ) : tab.category === "pdf" ? (
         <iframe
           src={tab.content}
-          className='w-full h-full border-0 bg-canvas'
+          className="w-full h-full border-0 bg-canvas"
           title={tab.name}
         />
       ) : tab.category === "binary" ? (
-        <div className='flex h-full flex-col items-center justify-center bg-canvas gap-2 text-tertiary'>
-          <i className='bi bi-file-earmark text-4xl text-tertiary' />
-          <p className='text-xs'>Binary file can't be displayed.</p>
+        <div className="flex h-full flex-col items-center justify-center bg-canvas gap-2 text-tertiary">
+          <i className="bi bi-file-earmark text-4xl text-tertiary" />
+          <p className="text-xs">Binary file can't be displayed.</p>
         </div>
       ) : tab.category === "spreadsheet" &&
         (tab.name.endsWith(".csv") || tab.name.endsWith(".tsv")) ? (

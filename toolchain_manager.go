@@ -114,7 +114,7 @@ func (a *App) InstallTools(lang string) error {
 		}
 	}
 
-	// Install missing tools
+	var failures []string
 	for _, tool := range missingTools(tc) {
 		wailsRuntime.EventsEmit(a.ctx, "toolchain:installProgress", map[string]any{
 			"tool":    tool,
@@ -122,24 +122,14 @@ func (a *App) InstallTools(lang string) error {
 			"message": fmt.Sprintf("Installing %s...", tool),
 		})
 
-		installCmd, ok := tc.ToolInstallMethods[tool]
-		if !ok {
+		if err := installTool(tc, tool); err != nil {
 			wailsRuntime.EventsEmit(a.ctx, "toolchain:installProgress", map[string]any{
 				"tool":    tool,
 				"status":  "error",
-				"message": fmt.Sprintf("No installation method for %s", tool),
+				"message": err.Error(),
 			})
+			failures = append(failures, err.Error())
 			continue
-		}
-
-		cmd := exec.CommandContext(context.Background(), tc.RuntimeBinary, parseArgs(installCmd)...)
-		if output, err := cmd.CombinedOutput(); err != nil {
-			wailsRuntime.EventsEmit(a.ctx, "toolchain:installProgress", map[string]any{
-				"tool":    tool,
-				"status":  "error",
-				"message": fmt.Sprintf("Failed to install %s: %v\n%s", tool, err, string(output)),
-			})
-			return fmt.Errorf("install %s: %w\n%s", tool, err, string(output))
 		}
 
 		wailsRuntime.EventsEmit(a.ctx, "toolchain:installProgress", map[string]any{
@@ -149,7 +139,53 @@ func (a *App) InstallTools(lang string) error {
 		})
 	}
 
+	if len(failures) > 0 {
+		return fmt.Errorf("%s", strings.Join(failures, "\n"))
+	}
 	return nil
+}
+
+// installTool runs the first candidate installer for tool whose own binary
+// (go, npm, brew, scoop, ...) is actually resolvable on this machine, using
+// the same PATH-tolerant findToolBinary lookup used for LSP/formatter
+// discovery - a GUI-launched MervCode often inherits a shorter PATH than a
+// terminal session, which would otherwise make an installed package manager
+// look "missing" even when it works fine from a shell.
+//
+// If no candidate's binary is found (or the tool has no candidates at all),
+// this returns a clear, actionable error instead of guessing at a shell
+// command - previously InstallTools executed human-readable instruction
+// strings like "Homebrew: brew install X | Scoop: ... | Manual: ..."
+// directly as commands, which could never succeed.
+func installTool(tc *LanguageToolchain, tool string) error {
+	candidates := tc.ToolInstallers[tool]
+	if len(candidates) == 0 {
+		if hint, ok := tc.ManualInstallHints[tool]; ok {
+			return fmt.Errorf("%s has no automatic installer available. %s", tool, hint)
+		}
+		return fmt.Errorf("no installation method configured for %s", tool)
+	}
+
+	var lastErr error
+	for _, installer := range candidates {
+		resolvedBinary, err := findToolBinary(installer.Binary)
+		if err != nil {
+			lastErr = fmt.Errorf("%s not found", installer.Binary)
+			continue
+		}
+
+		cmd := exec.CommandContext(context.Background(), resolvedBinary, installer.Args...)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("install %s via %s: %w\n%s", tool, installer.Binary, err, string(output))
+		}
+		return nil
+	}
+
+	if hint, ok := tc.ManualInstallHints[tool]; ok {
+		return fmt.Errorf("could not install %s automatically (%v). %s", tool, lastErr, hint)
+	}
+	return fmt.Errorf("could not install %s automatically: %v", tool, lastErr)
 }
 
 func missingTools(tc *LanguageToolchain) []string {
@@ -180,39 +216,4 @@ func installCommandFor(binary string) string {
 		}
 	}
 	return "Visit the language's official download page"
-}
-
-// parseArgs splits an install command string like "go install pkg@latest"
-// into its parts for exec.CommandContext.
-func parseArgs(cmd string) []string {
-	parts := splitCmd(cmd)
-	if len(parts) <= 1 {
-		return nil
-	}
-	return parts[1:]
-}
-
-func splitCmd(cmd string) []string {
-	var args []string
-	var current []byte
-	inQuote := false
-	for i := 0; i < len(cmd); i++ {
-		c := cmd[i]
-		if c == '"' || c == '\'' {
-			inQuote = !inQuote
-			continue
-		}
-		if c == ' ' && !inQuote {
-			if len(current) > 0 {
-				args = append(args, string(current))
-				current = nil
-			}
-			continue
-		}
-		current = append(current, c)
-	}
-	if len(current) > 0 {
-		args = append(args, string(current))
-	}
-	return args
 }

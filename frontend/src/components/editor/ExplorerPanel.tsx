@@ -142,6 +142,7 @@ export default function ExplorerPanel({
     item: FileItem;
   } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const optionsMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = loadWorkspaceState();
@@ -160,6 +161,23 @@ export default function ExplorerPanel({
     window.addEventListener("click", close);
     return () => window.removeEventListener("click", close);
   }, []);
+
+  // Close the "..." options menu on outside click. Uses mousedown (like the
+  // Settings dropdown) rather than click, since a plain click listener would
+  // fire on the same click that opens the menu (the toggle button's onClick
+  // runs first, then the event bubbles to this listener) and close it again
+  // immediately - mousedown on the toggle button fires before menuOpen ever
+  // becomes true, so it can't self-close.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (!optionsMenuRef.current?.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [menuOpen]);
 
   useEffect(() => {
     if (!root) return;
@@ -445,11 +463,11 @@ export default function ExplorerPanel({
           }}
           style={{ paddingLeft: depth * 12 + 10 }}
           className={`group flex items-center gap-2 rounded px-2 py-1 text-[12px] cursor-pointer transition-colors border border-transparent ${
-            dragOverItem === item.path ? "bg-accent-soft border-accent!" : ""
+            dragOverItem === item.path ? "bg-accent-soft border-accent" : ""
           } ${
             isActive
               ? "bg-accent-soft text-primary"
-              : "text-secondary hover:bg-hover hover:text-primary"
+              : "text-secondary hover:bg-(--bg-hover) hover:text-primary"
           }`}
         >
           {item.isDir ? (
@@ -490,24 +508,65 @@ export default function ExplorerPanel({
             <i className='bi bi-arrow-clockwise' />
           </button>
 
-          <button
-            className='rounded-md p-1 hover-bg'
-            onClick={() => setMenuOpen((value) => !value)}
-          >
-            <i className='bi bi-three-dots' />
-          </button>
-        </div>
-
-        {menuOpen && (
-          <div className='absolute top-9 right-2 z-50 min-w-40 rounded border border-subtle-strong bg-surface p-1 shadow-app'>
+          <div ref={optionsMenuRef} className='relative'>
             <button
-              className='flex w-full items-center gap-2 rounded px-2 py-2 text-left text-[12px] text-secondary hover:bg-hover'
-              onClick={handleOpenFolder}
+              className='rounded-md p-1 hover-bg'
+              onClick={() => setMenuOpen((value) => !value)}
+              title='More Actions'
             >
-              <i className='bi bi-folder2-open' /> Open Folder
+              <i className='bi bi-three-dots' />
             </button>
+
+            {menuOpen && (
+              <div className='absolute top-full right-0 mt-1 z-50 min-w-44 rounded border border-subtle-strong bg-surface p-1 shadow-app'>
+                {root && (
+                  <>
+                    <button
+                      className='flex w-full items-center gap-2 rounded px-2 py-2 text-left text-[12px] text-secondary hover:text-primary hover:bg-(--bg-hover)'
+                      onClick={async () => {
+                        const name = prompt("File name");
+                        setMenuOpen(false);
+                        if (!name) return;
+                        await CreateFile(`${root.path}/${name}`);
+                        await refreshExplorer();
+                      }}
+                    >
+                      <i className='bi bi-file-earmark-plus' /> New File
+                    </button>
+                    <button
+                      className='flex w-full items-center gap-2 rounded px-2 py-2 text-left text-[12px] text-secondary hover:text-primary hover:bg-(--bg-hover)'
+                      onClick={async () => {
+                        const name = prompt("Folder name");
+                        setMenuOpen(false);
+                        if (!name) return;
+                        await CreateFolder(`${root.path}/${name}`);
+                        await refreshExplorer();
+                      }}
+                    >
+                      <i className='bi bi-folder-plus' /> New Folder
+                    </button>
+                    <button
+                      className='flex w-full items-center gap-2 rounded px-2 py-2 text-left text-[12px] text-secondary hover:text-primary hover:bg-(--bg-hover)'
+                      onClick={() => {
+                        setOpenDirs({});
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <i className='bi bi-arrows-collapse' /> Collapse All
+                    </button>
+                    <div className='my-1 border-t border-subtle' />
+                  </>
+                )}
+                <button
+                  className='flex w-full items-center gap-2 rounded px-2 py-2 text-left text-[12px] text-secondary hover:text-primary hover:bg-(--bg-hover)'
+                  onClick={handleOpenFolder}
+                >
+                  <i className='bi bi-folder2-open' /> Open Folder
+                </button>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
       <div className='flex-1 overflow-auto px-1 py-2'>
         {!root && (
@@ -520,7 +579,7 @@ export default function ExplorerPanel({
               </p>
             </div>
             <button
-              className='rounded border border-subtle-strong bg-surface px-3 py-1.5 text-[11px] text-secondary hover:text-primary hover:bg-hover transition-colors'
+              className='rounded border border-subtle-strong bg-surface px-3 py-1.5 text-[11px] text-secondary hover:text-primary hover:bg-(--bg-hover) transition-colors'
               onClick={handleOpenFolder}
             >
               Open Folder
@@ -539,7 +598,7 @@ export default function ExplorerPanel({
           className='fixed z-50 bg-surface rounded border border-subtle-strong py-1 shadow-app min-w-40 flex flex-col'
         >
           <button
-            className='flex items-center gap-2 px-3 py-1.5 text-[12px] text-secondary hover:bg-hover hover:text-primary text-left'
+            className='flex items-center gap-2 px-3 py-1.5 text-[12px] text-secondary hover:bg-(--bg-hover) hover:text-primary text-left'
             onClick={async () => {
               const name = prompt("File name");
               if (!name) return;
@@ -554,7 +613,7 @@ export default function ExplorerPanel({
           </button>
 
           <button
-            className='flex items-center gap-2 px-3 py-1.5 text-[12px] text-secondary hover:bg-hover hover:text-primary text-left'
+            className='flex items-center gap-2 px-3 py-1.5 text-[12px] text-secondary hover:bg-(--bg-hover) hover:text-primary text-left'
             onClick={async () => {
               const name = prompt("Folder name");
               if (!name) return;
@@ -577,7 +636,7 @@ export default function ExplorerPanel({
           <div className='my-1 border-t border-subtle' />
 
           <button
-            className='flex items-center gap-2 px-3 py-1.5 text-[12px] text-secondary hover:bg-hover hover:text-primary text-left'
+            className='flex items-center gap-2 px-3 py-1.5 text-[12px] text-secondary hover:bg-(--bg-hover) hover:text-primary text-left'
             onClick={async () => {
               const name = prompt("Rename", contextMenu.item.name);
               if (!name) return;
@@ -592,7 +651,7 @@ export default function ExplorerPanel({
           </button>
 
           <button
-            className='flex items-center gap-2 px-3 py-1.5 text-[12px] text-danger hover:bg-danger-soft text-left'
+            className='flex items-center gap-2 px-3 py-1.5 text-[12px] text-danger hover:bg-(--danger-soft) text-left'
             onClick={async () => {
               if (!confirm(`Delete "${contextMenu.item.name}"?`)) return;
               await Delete(contextMenu.item.path);

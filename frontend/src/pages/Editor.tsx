@@ -20,7 +20,7 @@ interface EditorProps {
   onReady?: (editor: monaco.editor.IStandaloneCodeEditor) => void;
   onSave?: (content: string) => void | Promise<void>;
   onChange?: (content: string) => void;
-  rootPath?: string;
+  rootPath?: string | undefined;
 }
 
 export default function Editor({
@@ -203,7 +203,13 @@ export default function Editor({
 
     editor.updateOptions(toMonacoOptions(settings));
     model?.updateOptions(toModelOptions(settings));
+    // updateOptions can change values that affect the editor's pixel
+    // dimensions (padding, lineHeight, minimap, scrollbar sizes) without
+    // Monaco's automaticLayout ResizeObserver ever firing, since the
+    // container element itself doesn't resize - only its internal layout
+    // does. Forcing a layout() keeps the viewport/scroll metrics in sync.
+    editor.layout();
   }, [settings]);
 
-  return <div ref={containerRef} className='w-full h-full min-h-0' />;
+  return <div ref={containerRef} className="w-full h-full min-h-0" />;
 }

@@ -12,13 +12,16 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // ============================================================================
@@ -47,11 +50,61 @@ type lspBridge struct {
 	mu       sync.Mutex
 	listener net.Listener
 	server   *http.Server
-	sessions map[string]*lspSession // one-shot token -> session info
+	sessions map[string]*lspSession    // one-shot token -> session info
+	running  map[string]*LSPServerInfo // token -> live/recent server, for the Dev Tools inspector
 	ctx      context.Context
 }
 
-var bridge = &lspBridge{sessions: make(map[string]*lspSession)}
+var bridge = &lspBridge{
+	sessions: make(map[string]*lspSession),
+	running:  make(map[string]*LSPServerInfo),
+}
+
+// LSPServerInfo describes one spawned language server process, surfaced to
+// the frontend's Dev Tools / LSP Inspector panel (see editor/lsp/logger.ts).
+type LSPServerInfo struct {
+	ID        string    `json:"id"`
+	Lang      string    `json:"lang"`
+	Root      string    `json:"root"`
+	Command   string    `json:"command"`
+	Pid       int       `json:"pid"`
+	StartedAt time.Time `json:"startedAt"`
+	Status    string    `json:"status"` // "running" | "stopped" | "crashed"
+
+	cancel context.CancelFunc
+}
+
+// ListLSPServers returns a snapshot of every language server the bridge has
+// spawned this session (running or recently exited), newest first.
+func (a *App) ListLSPServers() []*LSPServerInfo {
+	bridge.mu.Lock()
+	defer bridge.mu.Unlock()
+
+	out := make([]*LSPServerInfo, 0, len(bridge.running))
+	for _, info := range bridge.running {
+		copy := *info
+		out = append(out, &copy)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].StartedAt.After(out[j].StartedAt) })
+	return out
+}
+
+// KillLSPServer force-stops a running server by ID (as shown in the
+// inspector). This is a hard stop, not a graceful shutdown/exit handshake -
+// intended for "this server is stuck, kill it" from the Dev Tools panel.
+// The frontend LSPConnection detects the resulting socket close and decides
+// whether to reconnect.
+func (a *App) KillLSPServer(id string) error {
+	bridge.mu.Lock()
+	info, ok := bridge.running[id]
+	bridge.mu.Unlock()
+
+	if !ok {
+		return fmt.Errorf("no running LSP server with id %s", id)
+	}
+	info.cancel()
+	return nil
+}
 
 var wsUpgrader = websocket.Upgrader{
 	// Loopback-only: the bridge listens on 127.0.0.1 and every session is
@@ -180,6 +233,9 @@ func (a *App) handleLSPWebSocket(w http.ResponseWriter, r *http.Request) {
 	if sess.root != "" {
 		cmd.Dir = sess.root
 	}
+	if len(tc.LSP.Env) > 0 {
+		cmd.Env = append(os.Environ(), tc.LSP.Env...)
+	}
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -203,7 +259,22 @@ func (a *App) handleLSPWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("[LSP bridge] %s started (root=%s)", sess.lang, sess.root)
 
-	go drainLSPStderr(sess.lang, stderr)
+	info := &LSPServerInfo{
+		ID:        token,
+		Lang:      sess.lang,
+		Root:      sess.root,
+		Command:   resolvedCmd,
+		Pid:       cmd.Process.Pid,
+		StartedAt: time.Now(),
+		Status:    "running",
+		cancel:    cancel,
+	}
+	bridge.mu.Lock()
+	bridge.running[token] = info
+	bridge.mu.Unlock()
+	emitLSPServerEvent(bridge.ctx, "lsp:serverStarted", info)
+
+	go drainLSPStderr(bridge.ctx, token, sess.lang, stderr)
 
 	transportErrs := make(chan error, 2)
 	go func() { transportErrs <- wsToStdio(conn, stdin) }()
@@ -212,6 +283,7 @@ func (a *App) handleLSPWebSocket(w http.ResponseWriter, r *http.Request) {
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
 
+	var exitErr error
 	select {
 	case err := <-transportErrs:
 		if err != nil && !isNormalWSClose(err) {
@@ -219,14 +291,42 @@ func (a *App) handleLSPWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 		cancel()
 		_ = stdin.Close()
-		<-exited
+		exitErr = <-exited
 	case err := <-exited:
+		exitErr = err
 		if err != nil && procCtx.Err() == nil {
 			log.Printf("[LSP bridge] %s exited: %v", sess.lang, err)
 		}
 	}
 
-	log.Printf("[LSP bridge] %s session ended (root=%s)", sess.lang, sess.root)
+	// procCtx.Err() != nil means either the transport closed normally (we
+	// called cancel() ourselves above) or KillLSPServer() was invoked - an
+	// intentional stop either way. Anything else exiting with an error is
+	// the server crashing on its own.
+	status := "stopped"
+	if exitErr != nil && procCtx.Err() == nil {
+		status = "crashed"
+	}
+
+	bridge.mu.Lock()
+	delete(bridge.running, token)
+	bridge.mu.Unlock()
+
+	info.Status = status
+	emitLSPServerEvent(bridge.ctx, "lsp:serverStopped", info)
+
+	log.Printf("[LSP bridge] %s session ended (root=%s, status=%s)", sess.lang, sess.root, status)
+}
+
+func emitLSPServerEvent(ctx context.Context, event string, info *LSPServerInfo) {
+	if ctx == nil {
+		return
+	}
+	// Copy so we never leak the unexported cancel func's enclosing state and
+	// so callers can't mutate the registry's copy through the event payload.
+	payload := *info
+	payload.cancel = nil
+	wailsRuntime.EventsEmit(ctx, event, payload)
 }
 
 // wsToStdio reads plain JSON-RPC text frames from the WebSocket (what
@@ -310,11 +410,23 @@ func readLSPFrame(reader *bufio.Reader) ([]byte, error) {
 	return buf, nil
 }
 
-func drainLSPStderr(lang string, r io.Reader) {
+func drainLSPStderr(ctx context.Context, id, lang string, r io.Reader) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), 4<<20)
 	for scanner.Scan() {
-		log.Printf("[%s] %s", lang, scanner.Text())
+		line := scanner.Text()
+		log.Printf("[%s] %s", lang, line)
+		if ctx != nil {
+			wailsRuntime.EventsEmit(ctx, "lsp:serverLog", map[string]any{
+				"id":   id,
+				"lang": lang,
+				"line": line,
+				"time": time.Now(),
+			})
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("[LSP bridge] %s stderr scan: %v", lang, err)
 	}
 }
 

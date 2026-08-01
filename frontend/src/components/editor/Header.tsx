@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState,useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Quit } from "../../../wailsjs/go/main/App";
 import CommandPalette, { type Command } from "./CommandPalette";
 import TopMenu from "./TopMenu";
@@ -44,7 +44,8 @@ interface HeaderProps {
   paletteOpen: boolean;
   setPaletteOpen: React.Dispatch<React.SetStateAction<boolean>>;
   onOpenSettingsTab: () => void;
-  rootPath: string | undefined
+  onToggleDevTools: () => void;
+  rootPath: string | undefined;
 }
 
 export default function Header({
@@ -63,7 +64,8 @@ export default function Header({
   paletteOpen,
   setPaletteOpen,
   onOpenSettingsTab,
-  rootPath
+  onToggleDevTools,
+  rootPath,
 }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const [isMaximized, setIsMaximized] = useState(false);
@@ -164,6 +166,14 @@ export default function Header({
           window.dispatchEvent(new CustomEvent("mervcode:open-folder"));
         },
       },
+      {
+        id: "toggle-lsp-inspector",
+        label: "Developer: Toggle LSP Inspector",
+        category: "Developer",
+        shortcut: "Ctrl Shift L",
+        icon: "bug",
+        run: onToggleDevTools,
+      },
     ];
 
     tabs.forEach((t: FileTab) => {
@@ -177,7 +187,15 @@ export default function Header({
     });
 
     return list;
-  }, [terminalOpen, sidebarCollapsed, theme, tabs, activePath, onOpenSettingsTab]);
+  }, [
+    terminalOpen,
+    sidebarCollapsed,
+    theme,
+    tabs,
+    activePath,
+    onOpenSettingsTab,
+    onToggleDevTools,
+  ]);
 
   const minimize = () => window.runtime?.WindowMinimise?.();
 
@@ -218,7 +236,7 @@ export default function Header({
     void refresh();
   }, [refresh]);
   return (
-    <header className='h-9 w-full bg-panel border-b border-subtle flex items-center select-none shrink-0'>
+    <header className="h-9 w-full bg-panel border-b border-subtle flex items-center select-none shrink-0">
       <TopMenu
         onOpenSettingsTab={onOpenSettingsTab}
         saveActiveFile={saveActiveFile}
@@ -232,10 +250,10 @@ export default function Header({
         activePath={activePath}
         closeTab={closeTab}
       />
-      <div className='draggable flex-1 h-full flex items-center '>
+      <div className="draggable flex-1 h-full flex items-center ">
         <GitBranchIcon className="size-5 font-semibold text-faint tracking-wide select-none mr-2"></GitBranchIcon>
-        <span className='text-[12px] font-semibold text-faint tracking-wide select-none'>
-        {status?.branch }
+        <span className="text-[12px] font-semibold text-faint tracking-wide select-none">
+          {status?.branch}
         </span>
       </div>
       <CommandPalette
@@ -243,69 +261,69 @@ export default function Header({
         onClose={() => setPaletteOpen(false)}
         commands={commands}
       />
-      <div className='no-drag flex items-center h-full pr-1 gap-0.5'>
+      <div className="no-drag flex items-center h-full pr-1 gap-0.5">
         <button
           onClick={minimize}
-          className='group w-8 h-8 rounded flex items-center justify-center hover:bg-hover transition-colors'
+          className="group w-8 h-8 rounded flex items-center justify-center hover:bg-hover transition-colors"
         >
           <svg
-            width='10'
-            height='10'
-            viewBox='0 0 12 12'
-            className='stroke-current text-tertiary group-hover:text-primary'
-            fill='none'
-            strokeWidth='1.5'
-            strokeLinecap='round'
+            width="10"
+            height="10"
+            viewBox="0 0 12 12"
+            className="stroke-current text-tertiary group-hover:text-primary"
+            fill="none"
+            strokeWidth="1.5"
+            strokeLinecap="round"
           >
-            <path d='M2 6H10' />
+            <path d="M2 6H10" />
           </svg>
         </button>
         <button
           onClick={maximize}
-          className='group w-8 h-8 rounded flex items-center justify-center hover:bg-hover transition-colors'
+          className="group w-8 h-8 rounded flex items-center justify-center hover:bg-hover transition-colors"
         >
           {isMaximized ? (
             <svg
-              width='10'
-              height='10'
-              viewBox='0 0 12 12'
-              fill='none'
-              stroke='currentColor'
-              className='text-tertiary group-hover:text-primary'
-              strokeWidth='1.3'
+              width="10"
+              height="10"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              className="text-tertiary group-hover:text-primary"
+              strokeWidth="1.3"
             >
-              <rect x='2.5' y='4' width='5.5' height='5.5' />
-              <path d='M4 4V2.5H9.5V8H8' />
+              <rect x="2.5" y="4" width="5.5" height="5.5" />
+              <path d="M4 4V2.5H9.5V8H8" />
             </svg>
           ) : (
             <svg
-              width='10'
-              height='10'
-              viewBox='0 0 12 12'
-              fill='none'
-              stroke='currentColor'
-              className='text-tertiary group-hover:text-primary'
-              strokeWidth='1.3'
+              width="10"
+              height="10"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              className="text-tertiary group-hover:text-primary"
+              strokeWidth="1.3"
             >
-              <rect x='2' y='2' width='8' height='8' />
+              <rect x="2" y="2" width="8" height="8" />
             </svg>
           )}
         </button>
         <button
           onClick={handleClose}
-          className='group w-8 h-8 rounded flex items-center justify-center hover:bg-[#DC143C] transition-colors'
+          className="group w-8 h-8 rounded flex items-center justify-center hover:bg-[#DC143C] transition-colors"
         >
           <svg
-            width='10'
-            height='10'
-            viewBox='0 0 12 12'
-            fill='none'
-            stroke='currentColor'
-            className='text-tertiary group-hover:text-white'
-            strokeWidth='1.5'
-            strokeLinecap='round'
+            width="10"
+            height="10"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            className="text-tertiary group-hover:text-white"
+            strokeWidth="1.5"
+            strokeLinecap="round"
           >
-            <path d='M3 3L9 9M9 3L3 9' />
+            <path d="M3 3L9 9M9 3L3 9" />
           </svg>
         </button>
       </div>

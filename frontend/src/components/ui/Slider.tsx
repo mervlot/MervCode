@@ -34,7 +34,7 @@ export default function Slider({
       let p = (clientX - rect.left) / rect.width;
       p = Math.max(0, Math.min(1, p));
       const val = Math.round((min + p * (max - min)) / step) * step;
-      onChange(Math.round(val));
+      onChange(Math.round(val * 100) / 100);
     },
     [min, max, step, onChange],
   );
@@ -56,15 +56,14 @@ export default function Slider({
   };
 
   return (
-    <div className='flex items-center justify-between py-2'>
+    <div className='flex items-center justify-between gap-4 py-2.5'>
       {(label || desc) && (
-        <div className='flex-1 min-w-0 mr-4'>
-          {label && <p className='text-sm font-medium text-primary'>{label}</p>}
-          {desc && <p className='text-xs text-tertiary mt-0.5'>{desc}</p>}
+        <div className='flex-1 min-w-0'>
+          {label && <p className='text-[13px] font-medium text-primary'>{label}</p>}
+          {desc && <p className='text-[12px] text-tertiary mt-0.5 leading-snug'>{desc}</p>}
         </div>
       )}
       <div className='flex items-center gap-3 shrink-0'>
-        {/* Track */}
         <div
           ref={trackRef}
           onPointerDown={handlePointerDown}
@@ -72,12 +71,12 @@ export default function Slider({
           onPointerUp={handlePointerUp}
           className='relative w-28 h-6 flex items-center cursor-pointer select-none'
         >
-          <div className='absolute w-full h-1 rounded-full bg-[#2a2a2a] overflow-hidden'>
+          <div className='absolute w-full h-1 rounded-full bg-surface-2 overflow-hidden'>
             <div
               className='h-full rounded-full'
               style={{
                 width: `${pct}%`,
-                background: `linear-gradient(90deg, #DC143C ${pct}%, transparent ${pct}%)`,
+                backgroundColor: "var(--accent)",
               }}
             />
           </div>
@@ -87,12 +86,12 @@ export default function Slider({
               left: `calc(${pct}% - 8px)`,
               transition: dragging ? "none" : "left 0.1s ease",
               boxShadow: dragging
-                ? "0 0 0 6px rgba(220, 20, 60, 0.15)"
-                : "0 1px 3px rgba(0,0,0,0.3)",
+                ? "0 0 0 6px var(--accent-soft-strong)"
+                : "0 1px 3px var(--shadow-color)",
             }}
           />
         </div>
-        <span className='text-sm text-secondary w-10 text-right tabular-nums'>
+        <span className='text-[12.5px] text-secondary w-12 text-right tabular-nums'>
           {value}
           {suffix}
         </span>

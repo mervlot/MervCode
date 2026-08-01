@@ -9,27 +9,27 @@ interface ToggleProps {
 
 export default function Toggle({ checked, onChange, label, desc }: ToggleProps) {
   return (
-    <div className='flex items-center justify-between py-2'>
+    <div className='flex items-center justify-between gap-4 py-2.5'>
       {(label || desc) && (
-        <div>
-          {label && <p className='text-sm font-medium text-primary'>{label}</p>}
-          {desc && <p className='text-xs text-tertiary mt-0.5'>{desc}</p>}
+        <div className='min-w-0'>
+          {label && <p className='text-[13px] font-medium text-primary'>{label}</p>}
+          {desc && <p className='text-[12px] text-tertiary mt-0.5 leading-snug'>{desc}</p>}
         </div>
       )}
       <button
         onClick={onChange}
-        className='relative w-11 h-6 rounded-full shrink-0 focus:outline-none focus:ring-2 focus:ring-[#DC143C]/40'
+        aria-pressed={checked}
+        className='relative w-10 h-5.5 rounded-full shrink-0 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-(--border-focus)'
         style={{
-          backgroundColor: checked ? "#DC143C" : "#2a2a2a",
-          transition: "background-color 0.2s ease",
+          backgroundColor: checked ? "var(--accent)" : "var(--bg-surface-2)",
         }}
       >
         <motion.span
           layout
-          transition={{ type: "spring", stiffness: 500, damping: 30 }}
-          className='absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm'
+          transition={{ type: "spring", stiffness: 500, damping: 32 }}
+          className='absolute top-0.5 w-4.5 h-4.5 rounded-full bg-white shadow-sm'
           style={{
-            left: checked ? "calc(100% - 20px)" : "4px",
+            left: checked ? "calc(100% - 20px)" : "2px",
           }}
         />
       </button>

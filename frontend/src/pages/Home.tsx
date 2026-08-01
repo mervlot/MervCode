@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type * as monaco from "monaco-editor";
+import * as monaco from "monaco-editor";
 
 // Components
 import Header from "../components/editor/Header";
 import Sidebar from "../components/editor/Sidebar";
 import EditorArea from "../components/editor/EditorArea";
 import StatusBar from "../components/editor/StatusBar";
+import LspInspector from "../components/editor/LspInspector";
 
 // Hooks
 import useTabManager from "../hooks/useTabManager";
@@ -29,6 +30,7 @@ export default function Home() {
     null,
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [devToolsOpen, setDevToolsOpen] = useState(false);
   const { settings, updateSettings } = useEditorSettings();
 
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
@@ -65,6 +67,21 @@ export default function Home() {
       editorRefs,
     },
   );
+
+  // Ctrl/Cmd+Click on an import path or file link in the editor (see
+  // editor/monaco/linkProvider.ts) dispatches this instead of calling
+  // openPathByString directly, so the Monaco layer never needs to know
+  // about the tab-management React tree above it.
+  useEffect(() => {
+    function handleOpenFile(e: Event) {
+      const { path, line } = (e as CustomEvent<{ path: string; line?: number }>)
+        .detail;
+      if (path) openPathByString(path, line);
+    }
+    window.addEventListener("mervcode:open-file", handleOpenFile);
+    return () =>
+      window.removeEventListener("mervcode:open-file", handleOpenFile);
+  }, [openPathByString]);
 
   const language = useMemo(() => {
     if (!tab.activeFile) return "plaintext";
@@ -107,6 +124,38 @@ export default function Home() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [tab.dirtyCount]);
 
+  // Ctrl+MouseWheel zoom (Monaco's `mouseWheelZoom` option) changes a
+  // process-wide `EditorZoom` multiplier, not the `fontSize` setting -
+  // Monaco applies it on top of whatever fontSize each editor already has.
+  // Left alone, the Settings panel's Font Size slider would drift out of
+  // sync with what's actually on screen, and the zoom itself is never
+  // persisted (reverts on restart). Fold it into the real setting instead:
+  // whenever the zoom level changes, read the effective font size Monaco
+  // just computed, save it as the new `fontSize`, then reset the zoom
+  // level back to neutral so it never double-applies on top of itself.
+  const applyingZoomRef = useRef(false);
+  useEffect(() => {
+    const disposable = monaco.editor.EditorZoom.onDidChangeZoomLevel(() => {
+      if (applyingZoomRef.current) return;
+      if (monaco.editor.EditorZoom.getZoomLevel() === 0) return;
+
+      const activeEditor = Object.values(editorRefs.current)[0];
+      if (!activeEditor) return;
+
+      const fontInfo = activeEditor.getOption(
+        monaco.editor.EditorOption.fontInfo,
+      );
+      const newFontSize = Math.round(fontInfo.fontSize);
+
+      applyingZoomRef.current = true;
+      monaco.editor.EditorZoom.setZoomLevel(0);
+      applyingZoomRef.current = false;
+
+      updateSettings({ fontSize: newFontSize });
+    });
+    return () => disposable.dispose();
+  }, [updateSettings]);
+
   // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -127,6 +176,9 @@ export default function Home() {
       } else if (e.key === "Tab") {
         e.preventDefault();
         tab.cycleTab(e.shiftKey ? -1 : 1);
+      } else if (e.shiftKey && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        setDevToolsOpen((v) => !v);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -196,7 +248,7 @@ export default function Home() {
   }
 
   return (
-    <div className='w-full h-screen flex flex-col bg-app-surface overflow-hidden select-none'>
+    <div className="w-full h-screen flex flex-col bg-app-surface overflow-hidden select-none">
       {}
       <Header
         onRequestQuit={requestQuit}
@@ -214,9 +266,14 @@ export default function Home() {
         paletteOpen={paletteOpen}
         setPaletteOpen={setPaletteOpen}
         onOpenSettingsTab={openSettingsTab}
+        onToggleDevTools={() => setDevToolsOpen((v) => !v)}
         rootPath={workspaceRoot?.path}
       />
-      <div className='flex-1 w-full flex min-h-0'>
+      <LspInspector
+        open={devToolsOpen}
+        onClose={() => setDevToolsOpen(false)}
+      />
+      <div className="flex-1 w-full flex min-h-0">
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -230,8 +287,6 @@ export default function Home() {
           setWorkspaceRoot={setWorkspaceRoot}
           openFile={openFile}
           openPathByString={openPathByString}
-          settings={settings}
-          onSettingsChange={updateSettings}
           onOpenSettingsTab={openSettingsTab}
         />
 

@@ -1,0 +1,9 @@
+{
+  "file_scan_exclusions": [
+    "**/node_modules",
+    "**/dist",
+    "**/build",
+    "**/coverage",
+    "**/wailsjs",
+  ],
+}

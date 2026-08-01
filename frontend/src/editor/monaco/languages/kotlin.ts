@@ -1,5 +1,5 @@
 import type { MonacoLanguage } from "../types";
-import { openLSPDocument } from "../lspClient";
+import { openLSPDocument } from "../../lsp";
 
 // Requires kotlin-language-server on PATH — see the "kotlin" entry in
 // toolchain.go for install instructions. No external formatter is wired

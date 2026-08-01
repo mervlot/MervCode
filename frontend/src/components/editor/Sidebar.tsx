@@ -2,10 +2,9 @@ import LeftBar from "./LeftBar";
 import ExplorerPanel from "./ExplorerPanel";
 import SearchPanel from "./SearchPanel";
 import SourceControlPanel from "./SourceControlPanel";
-import SettingsPanel from "./SettingsPanel";
 import PlaceholderPanel from "./PlaceHolderPanel";
 import ErrorBoundary from "./ErrorBoundary";
-import type { EditorSettings, FileTab, WorkspaceRoot } from "../../types";
+import type { FileTab, WorkspaceRoot } from "../../types";
 import AndroidPanel from "./AndroidPanel";
 interface SidebarProps {
   activeTab: string;
@@ -20,8 +19,6 @@ interface SidebarProps {
   setWorkspaceRoot: (root: WorkspaceRoot) => void;
   openFile: (file: FileTab, revealLine?: number) => void;
   openPathByString: (path: string, line?: number) => void;
-  settings: EditorSettings;
-  onSettingsChange: (patch: Partial<EditorSettings>) => void;
   onOpenSettingsTab: () => void;
 }
 
@@ -38,8 +35,6 @@ export default function Sidebar({
   setWorkspaceRoot,
   openFile,
   openPathByString,
-  settings,
-  onSettingsChange,
   onOpenSettingsTab,
 }: SidebarProps) {
   function handleTabChange(tab: string) {
@@ -80,11 +75,6 @@ export default function Sidebar({
               <AndroidPanel
                 onBack={() => setActiveTab("explorer")}
               />
-            ) : activeTab === "settings" ? (
-              <SettingsPanel
-                settings={settings}
-                onSettingsChange={onSettingsChange}
-              />
             ) : (
               <PlaceholderPanel
                 activeTab={activeTab}
@@ -95,7 +85,7 @@ export default function Sidebar({
           <div
             onMouseDown={startResize}
             className={`absolute top-0 right-0 w-1 h-full cursor-col-resize transition-colors ${
-              dragging ? "bg-accent/30" : "hover:bg-white/5"
+              dragging ? "bg-accent-soft-strong" : "hover:bg-(--bg-hover)"
             }`}
           />
         </div>

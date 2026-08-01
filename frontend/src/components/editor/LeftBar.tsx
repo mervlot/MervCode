@@ -1,4 +1,3 @@
-import { Settings } from "lucide-react";
 import tabs from "../../vars/sideBarTabs";
 
 interface LeftBarProps {
@@ -13,17 +12,8 @@ export default function LeftBar({ activeTab, onTabChange, onOpenSettingsTab }: L
   };
 
   return (
-    <aside className='no-drag w-12 h-full border-r border-subtle bg-panel flex flex-col items-center justify-between py-2 select-none shrink-0'>
-      <div className='w-full flex flex-col items-center gap-0.5'>
-        <button
-          title='Home'
-          className='w-5 h-6.7 flex items-center justify-center rounded text-secondary hover:text-primary hover:bg-hover transition-all mb-1'
-        >
-          <i className='bi  text-[15px]' />
-        </button>
-
-        <div className='w-full h-px mb-1' />
-
+    <aside className='no-drag w-12 h-full border-r border-subtle bg-panel flex flex-col items-center select-none shrink-0'>
+      <div className='flex-1 w-full flex flex-col items-center justify-center gap-7'>
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -31,15 +21,11 @@ export default function LeftBar({ activeTab, onTabChange, onOpenSettingsTab }: L
               key={tab.id}
               onClick={() => handleTabClick(tab.id)}
               title={tab.label}
-              className={`
-                relative w-9 h-9 flex my-6 items-center justify-center rounded text-[15px]
-                transition-all duration-100
-                ${
-                  isActive
-                    ? "text-primary bg-active"
-                    : "text-tertiary hover:text-secondary hover:bg-hover"
-                }
-              `}
+              className={`relative w-9 h-9 flex items-center justify-center rounded text-[15px] transition-all duration-100 ${
+                isActive
+                  ? "text-primary bg-active"
+                  : "text-tertiary hover:text-secondary hover:bg-(--bg-hover)"
+              }`}
             >
               <i className={tab.iconClass} />
               {isActive && (
@@ -50,16 +36,13 @@ export default function LeftBar({ activeTab, onTabChange, onOpenSettingsTab }: L
         })}
       </div>
 
-      <div className='w-full flex flex-col items-center gap-1'>
+      <div className='w-full flex flex-col items-center gap-1 py-3'>
         <button
           onClick={onOpenSettingsTab}
           title='Settings'
-          className={`
-            relative w-9 h-9 flex items-center justify-center rounded text-[15px] transition-all duration-100
-            text-tertiary hover:text-secondary hover:bg-hover
-          `}
+          className='relative w-9 h-9 flex items-center justify-center rounded text-[15px] transition-all duration-100 text-tertiary hover:text-secondary hover:bg-(--bg-hover)'
         >
-          <Settings size={18} />
+          <i className='bi bi-gear' />
         </button>
       </div>
     </aside>

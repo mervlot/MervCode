@@ -1,4 +1,5 @@
 import * as monaco from "monaco-editor";
+import { registerFileLinks } from "./linkProvider";
 
 let initialized = false;
 
@@ -6,6 +7,24 @@ export function setupMonaco() {
   if (initialized) return;
 
   initialized = true;
+
+  registerFileLinks();
+
+  // Custom @font-face webfonts (Monaspace, see index.css) load
+  // asynchronously. If Monaco measures character widths before they've
+  // finished loading, it caches metrics for whatever the browser fell
+  // back to in that instant; when the real font swaps in moments later
+  // the visible glyphs change width but Monaco's cached measurements
+  // don't, desyncing the caret's pixel position from the actual text
+  // (logical cursor position - typing, clicking, arrow keys - is
+  // unaffected, since that never depends on font metrics). Re-measuring
+  // once every currently-loading font has settled fixes the cache for
+  // every already-created editor instance.
+  if (typeof document !== "undefined" && document.fonts) {
+    document.fonts.ready
+      .then(() => monaco.editor.remeasureFonts())
+      .catch(() => undefined);
+  }
 
   monaco.editor.defineTheme("merv-dark", {
     base: "vs-dark",

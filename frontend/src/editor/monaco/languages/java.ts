@@ -1,5 +1,5 @@
 import type { MonacoLanguage } from "../types";
-import { openLSPDocument } from "../lspClient";
+import { openLSPDocument } from "../../lsp";
 
 // Requires jdtls (Eclipse JDT Language Server) on PATH — see the
 // "java" entry in toolchain.go for install instructions. No external

@@ -33,6 +33,26 @@ export function toModelOptions(
   };
 }
 
+// Monaspace's stylistic sets (ss01-ss09, texture healing / alternate glyphs)
+// are cosmetic and unrelated to ligatures, so they stay on unconditionally.
+// "calt"/"liga" are the actual ligature features (e.g. => becomes an arrow)
+// and must be gated by the fontLigatures setting.
+//
+// Passing a plain boolean for Monaco's fontLigatures option only ever
+// enables the default "calt"/"liga" pair - it can't also carry the
+// Monaspace stylistic sets, and passing true/false toggles Monaco's own
+// inline font-feature-settings, which (being inline) always wins over any
+// CSS rule. Passing the full feature-settings string here instead makes
+// this the single source of truth: Monaco applies exactly this string, so
+// toggling "Font Ligatures" in Settings actually changes what's rendered.
+const MONASPACE_STYLISTIC_SETS =
+  '"ss01" 1, "ss02" 1, "ss03" 1, "ss04" 1, "ss05" 1, "ss06" 1, "ss07" 1, "ss08" 1, "ss09" 1';
+
+function fontFeatureSettings(ligatures: boolean): string {
+  const calt = ligatures ? '"calt" 1, "liga" 1' : '"calt" 0, "liga" 0';
+  return `${calt}, ${MONASPACE_STYLISTIC_SETS}`;
+}
+
 export function toMonacoOptions(
   settings: EditorSettings,
 ): monaco.editor.IEditorOptions & monaco.editor.IGlobalEditorOptions {
@@ -41,7 +61,7 @@ export function toMonacoOptions(
     fontSize: settings.fontSize,
     fontFamily: settings.fontFamily,
     fontWeight: String(settings.fontWeight),
-    fontLigatures: settings.fontLigatures,
+    fontLigatures: fontFeatureSettings(settings.fontLigatures),
     lineHeight: settings.lineHeight,
 
     // Indentation (IGlobalEditorOptions — valid on
@@ -109,7 +129,8 @@ export function toMonacoOptions(
     quickSuggestions: settings.quickSuggestions,
     suggestOnTriggerCharacters: settings.suggestOnTriggerCharacters,
     acceptSuggestionOnEnter: settings.acceptSuggestionOnEnter,
-    acceptSuggestionOnCommitCharacter: settings.acceptSuggestionOnCommitCharacter,
+    acceptSuggestionOnCommitCharacter:
+      settings.acceptSuggestionOnCommitCharacter,
     suggestSelection: settings.suggestSelection,
     tabCompletion: settings.tabCompletion,
     snippetSuggestions: settings.snippetSuggestions,

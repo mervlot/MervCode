@@ -127,7 +127,7 @@ export default function ToolchainPrompt({
         )}
 
         {error && (
-          <div className='mt-3 p-2 bg-red-900/30 border border-red-700 rounded text-sm text-red-300'>
+          <div className='mt-3 p-2 bg-red-900/30 border border-red-700 rounded text-sm text-red-300 whitespace-pre-wrap'>
             {error}
           </div>
         )}

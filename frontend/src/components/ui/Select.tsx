@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown } from "lucide-react";
 
 interface Option {
   value: string;
@@ -37,26 +36,25 @@ export default function Select({
   }, []);
 
   return (
-    <div className='flex items-center justify-between py-2'>
+    <div className='flex items-center justify-between gap-4 py-2.5'>
       {(label || desc) && (
-        <div className='flex-1 min-w-0 mr-4'>
-          {label && <p className='text-sm font-medium text-primary'>{label}</p>}
-          {desc && <p className='text-xs text-tertiary mt-0.5'>{desc}</p>}
+        <div className='flex-1 min-w-0'>
+          {label && <p className='text-[13px] font-medium text-primary'>{label}</p>}
+          {desc && <p className='text-[12px] text-tertiary mt-0.5 leading-snug'>{desc}</p>}
         </div>
       )}
       <div ref={ref} className='relative shrink-0'>
         <button
           onClick={() => setOpen(!open)}
-          className='flex items-center gap-2 px-3 py-1.5 min-w-32.5 text-sm text-primary bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg hover:border-[#DC143C]/40 transition-colors'
+          className='flex items-center gap-2 px-3 py-1.5 min-w-36 text-[12.5px] text-primary bg-surface-2 border border-subtle rounded-lg hover:bg-(--bg-hover) hover:border-(--accent-border) transition-colors'
         >
-          <span className='flex-1 text-left'>{selected?.label ?? value}</span>
-          <ChevronDown
-            size={14}
-            className={`text-tertiary transition-transform ${open ? "rotate-180" : ""}`}
+          <span className='flex-1 text-left truncate'>{selected?.label ?? value}</span>
+          <i
+            className={`bi bi-chevron-down text-[10px] text-tertiary transition-transform ${open ? "rotate-180" : ""}`}
           />
         </button>
         {open && (
-          <div className='absolute top-full right-0 mt-1 min-w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg shadow-xl z-50 py-1 overflow-hidden'>
+          <div className='absolute top-full right-0 mt-1 min-w-full max-w-72 bg-surface border border-subtle-strong rounded-lg shadow-app z-50 py-1 overflow-hidden max-h-64 overflow-y-auto'>
             {options.map((opt) => (
               <button
                 key={opt.value}
@@ -64,10 +62,10 @@ export default function Select({
                   onChange(opt.value);
                   setOpen(false);
                 }}
-                className={`block w-full text-left px-3 py-1.5 text-sm transition-colors ${
+                className={`block w-full text-left px-3 py-1.5 text-[12.5px] transition-colors whitespace-nowrap ${
                   opt.value === value
-                    ? "text-[#DC143C] bg-[#DC143C]/10"
-                    : "text-secondary hover:text-primary hover:bg-white/5"
+                    ? "text-accent bg-accent-soft"
+                    : "text-secondary hover:text-primary hover:bg-(--bg-hover)"
                 }`}
               >
                 {opt.label}

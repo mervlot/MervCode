@@ -57,7 +57,7 @@ interface EditorAreaProps {
   onChange: (path: string, content: string) => void;
   onSave: (path: string, content: string) => void | Promise<void>;
   onOpenFolder: () => void;
-  rootPath?: string;
+  rootPath?: string | undefined;
 }
 
 export default function EditorArea({
@@ -112,7 +112,7 @@ export default function EditorArea({
   }, [language, activePath]);
 
   return (
-    <main className='flex-1 h-full min-w-0 flex flex-col bg-canvas relative'>
+    <main className="flex-1 h-full min-w-0 flex flex-col bg-canvas relative">
       {toolchainLang && (
         <ToolchainPrompt
           language={toolchainLang}
@@ -153,8 +153,8 @@ export default function EditorArea({
         />
       )}
 
-      <div className='flex-1 min-h-0 flex flex-col'>
-        <div className='flex-1 min-h-0 relative'>
+      <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 relative">
           {tabs.length === 0 ? (
             <EmptyState onOpenFolder={onOpenFolder} />
           ) : (

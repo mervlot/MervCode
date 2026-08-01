@@ -48,5 +48,6 @@
 
   },
 
-  "include": ["src"]
+  "include": ["src"],
+  
 }
