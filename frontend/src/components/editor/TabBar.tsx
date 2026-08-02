@@ -16,6 +16,7 @@ interface TabBarProps {
   onDragOver: (e: ReactDragEvent<HTMLDivElement>, path: string) => void;
   onDrop: (e: ReactDragEvent<HTMLDivElement>, path: string) => void;
   onDragEnd: () => void;
+  onCloseAll: () => void;
 }
 
 export default function TabBar({
@@ -31,10 +32,12 @@ export default function TabBar({
   onDragOver,
   onDrop,
   onDragEnd,
+  onCloseAll,
 }: TabBarProps) {
   return (
-    <div className='flex min-w-0 items-center gap-px overflow-x-auto bg-panel shrink-0'>
-      <AnimatePresence>
+    <div className='flex min-w-0 items-center bg-panel shrink-0 border-b border-subtle-strong'>
+      <div className='flex min-w-0 flex-1 items-center gap-px overflow-x-auto'>
+        <AnimatePresence>
         {tabs.map((t) => {
           const isActive = t.path === activePath;
           const isDragging = draggedTabPath === t.path;
@@ -101,8 +104,18 @@ export default function TabBar({
             </motion.div>
           );
         })}
-      </AnimatePresence>
-      <div className='flex-1 self-stretch border-b border-subtle-strong' />
+        </AnimatePresence>
+        <div className='flex-1 self-stretch' />
+      </div>
+      {tabs.length > 0 && (
+        <button
+          onClick={onCloseAll}
+          title='Close all tabs'
+          className='flex h-8 w-8 shrink-0 items-center justify-center text-accent transition-colors hover:bg-accent-soft border-l border-subtle-strong'
+        >
+          <i className='bi bi-x-lg text-[13px]' />
+        </button>
+      )}
     </div>
   );
 }

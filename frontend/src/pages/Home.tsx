@@ -20,14 +20,45 @@ import { detectLang } from "../editor/detectLang.js";
 import { loadWorkspaceState, saveWorkspaceState } from "../lib/persistence.js";
 import type { FileTab, WorkspaceRoot } from "../types";
 
+// Elements where the user is actively typing plain text (rename dialogs,
+// the search box, settings fields, the terminal's hidden textarea, ...).
+// Native text editing there (e.g. Ctrl+Backspace to delete a word) should
+// never be hijacked by a MervCode shortcut that happens to reuse the same
+// combination.
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  return (
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT"
+  );
+}
+
+function isInsideMonacoEditor(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && target.closest(".monaco-editor") !== null;
+}
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState("explorer");
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(true);
+  // Seeded synchronously from localStorage (not left null until
+  // ExplorerPanel's async ReadDir/loadRoot round-trip resolves) so that
+  // tabs restored on this same mount never open their LSP connection
+  // before the real workspace root is known. ExplorerPanel reads the same
+  // persisted rootPath independently to populate its own file tree and
+  // will call setWorkspaceRoot again once that completes, confirming/
+  // refreshing this value - it never regresses it to null.
   const [workspaceRoot, setWorkspaceRoot] = useState<WorkspaceRoot | null>(
-    null,
+    () => {
+      const saved = loadWorkspaceState();
+      if (!saved.rootPath) return null;
+      const name = saved.rootPath.split(/[\\/]/).pop() || saved.rootPath;
+      return { path: saved.rootPath, name };
+    },
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
@@ -161,6 +192,33 @@ export default function Home() {
     function handleKeyDown(e: KeyboardEvent) {
       const meta = e.ctrlKey || e.metaKey;
       if (!meta) return;
+
+      // Save must work everywhere, exactly like VS Code's Ctrl+S - even if
+      // focus is in the sidebar, the search box, or a rename field, not
+      // just while the Monaco editor itself is focused. Route through the
+      // active editor's own registered save action when one exists so
+      // format-on-save still applies; fall back to a plain save otherwise
+      // (e.g. a non-editor tab, or no editor instance mounted yet).
+      if (!e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        const activeEditor = activePath ? editorRefs.current[activePath] : undefined;
+        const saveAction = activeEditor?.getAction("merv-save-file");
+        if (saveAction) {
+          void saveAction.run();
+        } else if (tab.activeFile) {
+          void saveActiveFile(tab.activeFile);
+        }
+        return;
+      }
+
+      // Every other MervCode shortcut below repurposes a combination a
+      // plain text input would otherwise use for native editing (Ctrl+W,
+      // Ctrl+`, Ctrl+B, Ctrl+Tab, ...). Leave those alone while the user is
+      // actually typing somewhere other than the code editor itself (a
+      // rename dialog, the search box, a settings field, the terminal) so
+      // MervCode never steals a keystroke mid-edit.
+      if (isTypingTarget(e.target) && !isInsideMonacoEditor(e.target)) return;
+
       if (e.shiftKey && e.key.toLowerCase() === "p") {
         e.preventDefault();
         setPaletteOpen(true);
@@ -183,7 +241,7 @@ export default function Home() {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activePath, tabs, setTerminalOpen]);
+  }, [activePath, tabs, tab, saveActiveFile, setTerminalOpen]);
 
   // Listen for backend toolchain events
   useEffect(() => {

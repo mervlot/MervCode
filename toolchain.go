@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -32,18 +33,100 @@ type LSPConfig struct {
 	// files). Optional - nil falls back to the plain PATH/GOPATH lookup.
 	IsAvailable func() bool `json:"-"`
 
-	// Resolve, if set, computes the actual command and arguments to
-	// launch for this specific project, overriding Command/Args
-	// entirely. Used for servers that need per-invocation values (e.g.
-	// jdtls's -data workspace directory, which must be project-specific).
-	// Optional - nil falls back to findToolBinary(Command) + Args as-is.
-	Resolve func(ctx context.Context, projectRoot string) (command string, args []string, err error) `json:"-"`
+	// Resolve, if set, computes the actual command, arguments, and any
+	// extra "KEY=VALUE" environment variables to launch for this specific
+	// project, overriding Command/Args/Env entirely. Used for servers
+	// that need per-invocation values - e.g. jdtls's -data workspace
+	// directory (must be project-specific), or the bundled Kotlin LSP's
+	// JAVA_HOME (must point at its own bundled JBR, not the system Java,
+	// and that path is only known once the bundled runtime is located).
+	// Optional - nil falls back to findToolBinary(Command) + Args + Env
+	// as static values.
+	Resolve func(ctx context.Context, projectRoot string) (command string, args []string, env []string, err error) `json:"-"`
 }
 
 type FormatterConfig struct {
 	Command string   `json:"command"`
 	Args    []string `json:"args"`
 	Stdin   bool     `json:"stdin"`
+
+	// DynamicArgs, if set, computes extra arguments to append after Args
+	// for this specific file - e.g. Prettier's `--stdin-filepath <path>`,
+	// which it needs (instead of a real file extension) to pick the right
+	// parser for .ts vs .tsx vs .jsx when the content itself is piped in
+	// over stdin rather than read from disk. Optional - nil means no extra
+	// arguments beyond the static Args.
+	DynamicArgs func(filePath string) []string `json:"-"`
+
+	// Resolve, if set, computes the actual command and arguments to invoke
+	// for this specific file, overriding Command/Args/DynamicArgs entirely.
+	// Used for formatters that aren't a single named binary on PATH - e.g.
+	// google-java-format/ktfmt, which are launched as `java -jar <bundled
+	// jar>`, where both the java executable and the jar path are resolved
+	// from MervCode's own bundled runtime directories (see
+	// google_java_format.go/ktfmt.go). Optional - nil falls back to
+	// findToolBinary(Command) + Args/DynamicArgs as before.
+	Resolve func(filePath string) (command string, args []string, err error) `json:"-"`
+
+	// IsAvailable mirrors LSPConfig.IsAvailable for formatters whose "is it
+	// installed" check needs to be more involved than a plain PATH lookup
+	// (e.g. a bundled jar plus a bundled JBR to run it with). Optional -
+	// nil falls back to findToolBinary(Command).
+	IsAvailable func() bool `json:"-"`
+}
+
+// LinterConfig configures a pluggable linter for a language, mirroring
+// FormatterConfig's shape and DynamicArgs convention. Every linter has its
+// own CLI conventions and output format, so Parse is what actually
+// understands a specific linter's stdout - adding a new language's linter
+// (Python's ruff, Go's golangci-lint, ...) never requires touching
+// LintDocument itself, only supplying a new LinterConfig with its own
+// DynamicArgs/Parse (see eslint.go for the "typescript" entry's).
+type LinterConfig struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+	Stdin   bool     `json:"stdin"`
+
+	// DynamicArgs mirrors FormatterConfig.DynamicArgs - extra arguments
+	// computed per-file, e.g. ESLint's `--stdin-filename <path>` (needed
+	// both to resolve the right config/parser and to report a meaningful
+	// file name even though content is piped in over stdin).
+	DynamicArgs func(filePath string) []string `json:"-"`
+
+	// Resolve mirrors FormatterConfig.Resolve - computes the actual command
+	// and arguments to invoke for this specific file, overriding
+	// Command/Args/DynamicArgs entirely. Used for linters that aren't a
+	// single named binary on PATH (e.g. checkstyle/ktlint - see
+	// checkstyle.go/ktlint.go). Optional - nil falls back to
+	// findToolBinary(Command) + Args/DynamicArgs as before.
+	Resolve func(filePath string) (command string, args []string, err error) `json:"-"`
+
+	// Parse converts this linter's raw stdout into normalized
+	// LintDiagnostics. filePath is passed through so a linter whose output
+	// can span multiple files (golangci-lint analyzes a whole package
+	// directory - see golangci-lint.go) can filter results down to just
+	// the file actually being linted. Required - LintDocument has no
+	// fallback parsing.
+	Parse func(output []byte, filePath string) ([]LintDiagnostic, error) `json:"-"`
+
+	// IsAvailable mirrors LSPConfig.IsAvailable for linters whose "is it
+	// installed" check needs to be more involved than a plain PATH lookup.
+	// Optional - nil falls back to findToolBinary(Command).
+	IsAvailable func() bool `json:"-"`
+}
+
+// LintDiagnostic is one normalized finding from a language's linter,
+// independent of whatever output format that linter actually emits - the
+// frontend maps these directly onto Monaco markers, the same way LSP
+// publishDiagnostics notifications are (see editor/lsp/diagnostics.ts).
+type LintDiagnostic struct {
+	Severity  string `json:"severity"` // "error" | "warning" | "info"
+	Message   string `json:"message"`
+	RuleID    string `json:"ruleId,omitempty"`
+	Line      int    `json:"line"`
+	Column    int    `json:"column"`
+	EndLine   int    `json:"endLine,omitempty"`
+	EndColumn int    `json:"endColumn,omitempty"`
 }
 
 // ToolInstaller is one concrete, automatable way to install a tool: run
@@ -61,6 +144,7 @@ type LanguageToolchain struct {
 	Name              string           `json:"name"`
 	LSP               *LSPConfig       `json:"lsp,omitempty"`
 	Formatter         *FormatterConfig `json:"formatter,omitempty"`
+	Linter            *LinterConfig    `json:"-"`
 	Markers           []string         `json:"markers"`
 	RuntimeBinary     string           `json:"runtimeBinary"`
 	RuntimeInstallURL string           `json:"runtimeInstallUrl"`
@@ -95,12 +179,23 @@ func init() {
 				Command: "gofmt",
 				Stdin:   true,
 			},
+			// golangci-lint has no stdin mode for `run` (only its separate
+			// `fmt` command supports --stdin), so this always lints the
+			// file's last-saved contents on disk - see golangci-lint.go.
+			Linter: &LinterConfig{
+				Command:     "golangci-lint",
+				DynamicArgs: golangciLintArgs,
+				Parse:       parseGolangciLintJSON,
+			},
 			Markers:           []string{"go.mod"},
 			RuntimeBinary:     "go",
 			RuntimeInstallURL: "https://go.dev/dl/",
 			ToolInstallers: map[string][]ToolInstaller{
 				"gopls": {
 					{Binary: "go", Args: []string{"install", "golang.org/x/tools/gopls@latest"}},
+				},
+				"golangci-lint": {
+					{Binary: "go", Args: []string{"install", "github.com/golangci/golangci-lint/cmd/golangci-lint@latest"}},
 				},
 			},
 			// gofmt ships inside the Go distribution itself (same bin dir as
@@ -117,6 +212,26 @@ func init() {
 				Command: "typescript-language-server",
 				Args:    []string{"--stdio"},
 			},
+			// Prettier reads the file's content from stdin and is told the
+			// real path via --stdin-filepath purely so it can pick the right
+			// parser (plain TS vs TSX vs JSX) - it never touches the file on
+			// disk itself.
+			Formatter: &FormatterConfig{
+				Command: "prettier",
+				Stdin:   true,
+				DynamicArgs: func(filePath string) []string {
+					return []string{"--stdin-filepath", filePath}
+				},
+			},
+			// See eslint.go for eslintArgs/parseESLintJSON - this is the only
+			// language wired to a linter so far, but LintDocument itself
+			// (toolchain.go) has no ESLint-specific knowledge at all.
+			Linter: &LinterConfig{
+				Command:     "eslint",
+				Stdin:       true,
+				DynamicArgs: eslintArgs,
+				Parse:       parseESLintJSON,
+			},
 			Markers: []string{
 				"tsconfig.json",
 				"jsconfig.json",
@@ -130,6 +245,12 @@ func init() {
 			ToolInstallers: map[string][]ToolInstaller{
 				"typescript-language-server": {
 					{Binary: "npm", Args: []string{"install", "-g", "typescript", "typescript-language-server"}},
+				},
+				"prettier": {
+					{Binary: "npm", Args: []string{"install", "-g", "prettier"}},
+				},
+				"eslint": {
+					{Binary: "npm", Args: []string{"install", "-g", "eslint"}},
 				},
 			},
 		},
@@ -147,7 +268,31 @@ func init() {
 				IsAvailable: jdtlsAvailable,
 				Resolve:     ResolveJDTLS,
 			},
-			Markers:           []string{"pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"},
+			// google-java-format has no configurability, so there's no
+			// config file to manage - see google_java_format.go.
+			Formatter: &FormatterConfig{
+				Command:     "google-java-format",
+				Stdin:       true,
+				IsAvailable: googleJavaFormatAvailable,
+				Resolve:     ResolveGoogleJavaFormat,
+			},
+			// Checkstyle has no stdin mode, so this always lints the file's
+			// last-saved contents on disk - see checkstyle.go.
+			Linter: &LinterConfig{
+				Command:     "checkstyle",
+				IsAvailable: checkstyleAvailable,
+				Resolve:     ResolveCheckstyle,
+				Parse:       parseCheckstyleXML,
+			},
+			Markers: []string{
+				"pom.xml",
+				"build.gradle",
+				"build.gradle.kts",
+				"settings.gradle",
+				"settings.gradle.kts",
+				"kpm.json",
+				"kpm.lock",
+				"kpm.run"},
 			RuntimeBinary:     "java",
 			RuntimeInstallURL: "https://adoptium.net/",
 			ManualInstallHints: map[string]string{
@@ -158,24 +303,39 @@ func init() {
 			ID:   "kotlin",
 			Name: "Kotlin",
 			LSP: &LSPConfig{
-				// fwcd/kotlin-language-server. Ships as a wrapper script
-				// (kotlin-language-server / .bat on Windows).
-				Command: "kotlin-language-server",
-				Args:    []string{},
+				Command:     "kotlin-lsp",
+				Args:        nil,
+				IsAvailable: kotlinLSAvailable,
+				Resolve:     ResolveKotlinLS,
 			},
-			Markers:           []string{"build.gradle.kts", "build.gradle", "settings.gradle.kts", "settings.gradle"},
-			RuntimeBinary:     "java",
-			RuntimeInstallURL: "https://adoptium.net/",
-			// Same story as jdtls - no single cross-platform command exists.
-			ToolInstallers: map[string][]ToolInstaller{
-				"kotlin-language-server": {
-					{Binary: "brew", Args: []string{"install", "kotlin-language-server"}},
-					{Binary: "scoop", Args: []string{"install", "kotlin-language-server"}},
-				},
+			// Runs on the Kotlin LSP's own bundled JBR, not a system JDK -
+			// see ktfmt.go.
+			Formatter: &FormatterConfig{
+				Command:     "ktfmt",
+				Stdin:       true,
+				IsAvailable: ktfmtAvailable,
+				Resolve:     ResolveKtfmt,
 			},
-			ManualInstallHints: map[string]string{
-				"kotlin-language-server": "No Homebrew or Scoop found. Install manually from https://github.com/fwcd/kotlin-language-server/releases, or install Homebrew/Scoop first and try again.",
+			// ktlint can autoformat too, but ktfmt is the designated
+			// formatter here - ktlint is used purely for lint diagnostics.
+			// See ktlint.go.
+			Linter: &LinterConfig{
+				Command:     "ktlint",
+				Stdin:       true,
+				IsAvailable: ktlintAvailable,
+				Resolve:     ResolveKtlint,
+				Parse:       parseKtlintJSON,
 			},
+			Markers: []string{
+				"build.gradle.kts",
+				"build.gradle",
+				"settings.gradle.kts",
+				"settings.gradle",
+				"kpm.json",
+				"kpm.lock",
+				"kpm.run",
+			},
+			RuntimeBinary: "intellij-server",
 		},
 	}
 }
@@ -218,11 +378,29 @@ func (a *App) FormatDocument(lang, filePath, content string) (string, error) {
 	}
 
 	f := tc.Formatter
-	resolvedCmd, err := findToolBinary(f.Command)
-	if err != nil {
-		return "", fmt.Errorf("locate %s: %w", f.Command, err)
+	if f.IsAvailable != nil && !f.IsAvailable() {
+		return "", fmt.Errorf("%s is not available", f.Command)
 	}
-	cmd := exec.Command(resolvedCmd, f.Args...)
+
+	var resolvedCmd string
+	var args []string
+	var err error
+	if f.Resolve != nil {
+		resolvedCmd, args, err = f.Resolve(filePath)
+		if err != nil {
+			return "", fmt.Errorf("resolve %s: %w", f.Command, err)
+		}
+	} else {
+		resolvedCmd, err = findToolBinary(f.Command)
+		if err != nil {
+			return "", fmt.Errorf("locate %s: %w", f.Command, err)
+		}
+		args = f.Args
+		if f.DynamicArgs != nil {
+			args = append(append([]string{}, f.Args...), f.DynamicArgs(filePath)...)
+		}
+	}
+	cmd := exec.Command(resolvedCmd, args...)
 
 	if f.Stdin {
 		cmd.Stdin = strings.NewReader(content)
@@ -237,4 +415,69 @@ func (a *App) FormatDocument(lang, filePath, content string) (string, error) {
 	}
 
 	return stdout.String(), nil
+}
+
+// LintDocument runs lang's configured linter against content (treated as
+// filePath's current, possibly-unsaved contents) and returns normalized
+// diagnostics. Mirrors FormatDocument's shape and error handling - the only
+// thing linter-specific is LinterConfig.Parse (see eslint.go).
+func (a *App) LintDocument(lang, filePath, content string) ([]LintDiagnostic, error) {
+	tc := GetToolchain(lang)
+	if tc == nil || tc.Linter == nil {
+		return nil, fmt.Errorf("no linter configured for %s", lang)
+	}
+
+	l := tc.Linter
+	if l.IsAvailable != nil && !l.IsAvailable() {
+		return nil, fmt.Errorf("%s is not available", l.Command)
+	}
+
+	var resolvedCmd string
+	var args []string
+	var err error
+	if l.Resolve != nil {
+		resolvedCmd, args, err = l.Resolve(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("resolve %s: %w", l.Command, err)
+		}
+	} else {
+		resolvedCmd, err = findToolBinary(l.Command)
+		if err != nil {
+			return nil, fmt.Errorf("locate %s: %w", l.Command, err)
+		}
+		args = l.Args
+		if l.DynamicArgs != nil {
+			args = append(append([]string{}, l.Args...), l.DynamicArgs(filePath)...)
+		}
+	}
+	cmd := exec.Command(resolvedCmd, args...)
+	// Run from filePath's own directory rather than MervCode's own process
+	// directory - needed for linters that operate on real files/packages
+	// instead of stdin content (golangci-lint's "." target below only makes
+	// sense relative to this), and harmless for stdin-based linters like
+	// ESLint, which are already given filePath as an absolute path.
+	cmd.Dir = filepath.Dir(filePath)
+
+	if l.Stdin {
+		cmd.Stdin = strings.NewReader(content)
+	}
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	// Linters conventionally exit non-zero the moment they find any issue
+	// at all (e.g. one error-severity finding) - that's normal operation,
+	// not a failure to run, so a non-zero exit only becomes a real error
+	// when there's no parseable output to fall back on.
+	runErr := cmd.Run()
+	diagnostics, parseErr := l.Parse(stdout.Bytes(), filePath)
+	if parseErr != nil {
+		if runErr != nil {
+			return nil, fmt.Errorf("lint %s: %w\n%s", lang, runErr, stderr.String())
+		}
+		return nil, fmt.Errorf("parse %s lint output: %w", lang, parseErr)
+	}
+
+	return diagnostics, nil
 }

@@ -32,8 +32,9 @@ export function listConnectionSnapshots(): ConnectionSnapshot[] {
 /**
  * Resolves the nearest project root that owns filePath for the given
  * language (see workspace.go's findNearestMarker), falling back to the
- * workspace's opened folder - and to filePath's own directory - if the Go
- * call fails for any reason. This is what turns a single opened folder
+ * document URI's own directory if the Go call fails. This prevents a relative
+ * workspace value such as "." from becoming an LSP process root. This is what
+ * turns a single opened folder
  * into a true multi-root workspace: a Go file and a TypeScript file living
  * in different subdirectories of the same repo each resolve to (and get
  * routed to a connection keyed on) their own project root.
@@ -46,6 +47,11 @@ export async function resolveProjectRoot(
   try {
     return await ResolveProjectRoot(lang, filePath, fallbackRoot ?? "");
   } catch {
-    return fallbackRoot ?? "";
+    return directoryFromFilePath(filePath);
   }
+}
+
+function directoryFromFilePath(filePath: string): string {
+  const separator = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
+  return separator > 0 ? filePath.slice(0, separator) : "";
 }

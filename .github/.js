@@ -5534,7 +5534,7 @@ var Cr = {
       enabledFor: ["angular", "angular_ngrx"],
     },
     {
-      name: "angular-resolver",
+      name: "angular-(resolve)r",
       clone: { base: "angular", color: "green-600" },
       fileExtensions: ["resolver.ts", "resolver.js"],
       enabledFor: ["angular", "angular_ngrx"],

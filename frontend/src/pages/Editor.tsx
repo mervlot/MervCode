@@ -21,6 +21,7 @@ interface EditorProps {
   onSave?: (content: string) => void | Promise<void>;
   onChange?: (content: string) => void;
   rootPath?: string | undefined;
+  active?: boolean | undefined;
 }
 
 export default function Editor({
@@ -33,6 +34,7 @@ export default function Editor({
   onSave,
   onChange,
   rootPath,
+  active,
 }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -41,6 +43,10 @@ export default function Editor({
   const onChangeRef = useRef(onChange);
   const settingsRef = useRef(settings);
   const rootPathRef = useRef(rootPath);
+  // Tracks which rootPath value the currently-active LSP connection was
+  // opened with, so the effect below can tell "rootPath prop changed" from
+  // "rootPath prop re-rendered with the same value".
+  const appliedRootPathRef = useRef<string | undefined>(undefined);
   const lspCleanupRef = useRef<(() => void) | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { theme } = useTheme();
@@ -112,6 +118,7 @@ export default function Editor({
       });
 
       lspCleanupRef.current?.();
+      appliedRootPathRef.current = rootPathRef.current;
       lspCleanupRef.current =
         applyLanguageFeatures(langKey, editor, model, rootPathRef.current) ??
         null;
@@ -168,6 +175,24 @@ export default function Editor({
 
   useEffect(() => {
     rootPathRef.current = rootPath;
+
+    // The workspace root often isn't known yet the moment a restored tab's
+    // editor mounts (ExplorerPanel resolves it asynchronously), so the
+    // mount effect above can end up opening the LSP connection with an
+    // undefined/stale rootPath. Once the real root arrives, re-wire the
+    // connection so the language server is spawned/queried against the
+    // actual opened project instead of being stuck on whatever fallback it
+    // started with.
+    if (appliedRootPathRef.current === rootPath) return;
+
+    const model = modelRef.current;
+    const editor = editorRef.current;
+    if (!model || !editor) return;
+
+    appliedRootPathRef.current = rootPath;
+    lspCleanupRef.current?.();
+    lspCleanupRef.current =
+      applyLanguageFeatures(langKey, editor, model, rootPath) ?? null;
   }, [rootPath]);
 
   useEffect(() => {
@@ -186,6 +211,7 @@ export default function Editor({
 
     monaco.editor.setModelLanguage(model, langKey);
 
+    appliedRootPathRef.current = rootPathRef.current;
     lspCleanupRef.current?.();
     lspCleanupRef.current =
       applyLanguageFeatures(langKey, editor, model, rootPathRef.current) ??
@@ -210,6 +236,18 @@ export default function Editor({
     // does. Forcing a layout() keeps the viewport/scroll metrics in sync.
     editor.layout();
   }, [settings]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !active) return;
+    // Wait a frame so the container's display:none -> block transition
+    // has actually taken effect before measuring it.
+    const raf = requestAnimationFrame(() => {
+      editor.layout();
+      editor.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [active]);
 
   return <div ref={containerRef} className="w-full h-full min-h-0" />;
 }

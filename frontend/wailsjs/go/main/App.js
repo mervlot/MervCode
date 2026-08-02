@@ -66,6 +66,10 @@ export function KillLSPServer(arg1) {
   return window['go']['main']['App']['KillLSPServer'](arg1);
 }
 
+export function LintDocument(arg1, arg2, arg3) {
+  return window['go']['main']['App']['LintDocument'](arg1, arg2, arg3);
+}
+
 export function ListLSPServers() {
   return window['go']['main']['App']['ListLSPServers']();
 }

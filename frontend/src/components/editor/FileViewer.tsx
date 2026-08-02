@@ -19,6 +19,7 @@ interface FileViewerProps {
   onChange: (path: string, content: string) => void;
   onSave: (path: string, content: string) => void | Promise<void>;
   rootPath?: string | undefined;
+  active?: boolean | undefined;
 }
 
 export default function FileViewer({
@@ -31,6 +32,7 @@ export default function FileViewer({
   onChange,
   onSave,
   rootPath,
+  active,
 }: FileViewerProps) {
   return (
     <ErrorBoundary label={tab.name} resetKey={tab.path}>
@@ -83,6 +85,7 @@ export default function FileViewer({
           onChange={(content) => onChange(tab.path, content)}
           onSave={async (newContent) => onSave(tab.path, newContent)}
           rootPath={rootPath}
+          active={active}
         />
       )}
     </ErrorBoundary>

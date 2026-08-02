@@ -136,6 +136,7 @@ export default function EditorArea({
           onDragOver={handleTabDragOver}
           onDrop={handleTabDrop}
           onDragEnd={handleTabDragEnd}
+          onCloseAll={closeAllTabs}
         />
       )}
 
@@ -173,6 +174,7 @@ export default function EditorArea({
                   onChange={onChange}
                   onSave={onSave}
                   rootPath={rootPath}
+                  active={t.path === activePath}
                 />
               </div>
             ))

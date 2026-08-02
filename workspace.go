@@ -1,125 +1,134 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 )
 
-// ============================================================================
-// Minimal workspace intelligence: resolving which project "owns" a file.
-//
-// Every language server needs to be spawned with a working directory/rootUri
-// that actually contains its project files (node_modules, go.sum, etc). Up
-// until now the whole app passed a single global "workspace root" (whatever
-// folder was opened in the explorer) to every LSP session, regardless of
-// language. That breaks the moment a repo isn't itself a single package:
-// a monorepo with `frontend/package.json` + `backend/go.mod` would spawn
-// typescript-language-server rooted at the repo root, which has no
-// package.json/node_modules of its own, so imports and interfaces never
-// resolve.
-//
-// findNearestMarker walks up from a file's directory looking for the
-// language's marker files (see `Markers` in toolchain.go) - the same
-// technique VS Code, Zed and every serious LSP client use. This is what
-// turns a single opened folder into a real multi-root workspace: a Go file
-// and a TypeScript file in different subdirectories each get routed to
-// their own server instance, rooted at their own nearest project - without
-// any explicit "multi-root" configuration from the user.
-// ============================================================================
-
+// workspaceManager caches resolved project roots per language and source
+// directory. Project roots are always absolute directories so they can safely
+// be used as both an LSP process working directory and an initialize rootUri.
 type workspaceManager struct {
 	mu    sync.RWMutex
-	cache map[string]string // "<lang>::<dir>" -> resolved project root
+	cache map[string]string // "<lang>::<file dir>::<fallback root>" -> project root
 }
 
 var workspace = &workspaceManager{cache: make(map[string]string)}
 
-// ResolveProjectRoot returns the nearest ancestor directory of filePath that
-// contains one of lang's marker files. fallbackRoot (typically the folder
-// open in the explorer) is used as both the search boundary and the final
-// fallback when no marker is found, so resolution never escapes the
-// workspace the user actually opened.
+// ResolveProjectRoot returns the nearest ancestor of filePath containing a
+// language marker. The search continues to the filesystem root so nested
+// workspaces and projects opened through a subdirectory are detected. If no
+// marker exists, it uses the absolute opened-workspace directory when one was
+// supplied; otherwise it uses the document's own directory.
 func (a *App) ResolveProjectRoot(lang, filePath, fallbackRoot string) (string, error) {
-	return workspace.resolve(lang, filePath, fallbackRoot), nil
+	return workspace.resolve(lang, filePath, fallbackRoot)
 }
 
 // InvalidateWorkspaceCache clears cached project-root lookups. Call this
-// after operations that create/remove marker files (git checkout, `npm
-// init`, `go mod init`, pulling a branch, ...) so newly-appeared projects
-// are picked up without restarting MervCode.
+// after operations that create/remove marker files (git checkout, `npm init`,
+// `go mod init`, pulling a branch, ...) so newly-appeared projects are picked
+// up without restarting MervCode.
 func (a *App) InvalidateWorkspaceCache() {
 	workspace.mu.Lock()
 	defer workspace.mu.Unlock()
 	workspace.cache = make(map[string]string)
 }
 
-func (w *workspaceManager) resolve(lang, filePath, fallbackRoot string) string {
+func (w *workspaceManager) resolve(lang, filePath, fallbackRoot string) (string, error) {
+	filePath, err := absolutePath(filePath)
+	if err != nil {
+		return "", fmt.Errorf("resolve LSP document path: %w", err)
+	}
 	dir := filepath.Dir(filePath)
 
-	tc := GetToolchain(lang)
-	if tc == nil || len(tc.Markers) == 0 {
-		return firstNonEmpty(fallbackRoot, dir)
+	fallback := dir
+	// A relative fallback (especially ".", which is the desktop app's own
+	// process directory rather than anything the user opened) is not usable
+	// as a project root, so the document's own directory is kept as the
+	// fallback in that case. Any other non-empty value is the folder the
+	// user actually opened in the IDE and always wins over the file's own
+	// directory once no marker is found - this is the case single-file
+	// nested source trees like KPM/src/main/kotlin/... rely on.
+	if trimmed := strings.TrimSpace(fallbackRoot); trimmed != "" && filepath.Clean(trimmed) != "." {
+		if workspaceDir, err := absoluteDirectory(trimmed); err == nil {
+			fallback = workspaceDir
+		}
 	}
 
-	key := lang + "::" + dir
+	tc := GetToolchain(lang)
+	if tc == nil {
+		return "", fmt.Errorf("no toolchain configured for %s", lang)
+	}
+	if len(tc.Markers) == 0 {
+		return fallback, nil
+	}
+
+	key := lang + "::" + dir + "::" + fallback
 	w.mu.RLock()
 	if cached, ok := w.cache[key]; ok {
 		w.mu.RUnlock()
-		return cached
+		return cached, nil
 	}
 	w.mu.RUnlock()
 
-	root := findNearestMarker(dir, tc.Markers, fallbackRoot)
+	root := findNearestMarker(dir, tc.Markers)
+	if root == "" {
+		root = fallback
+	}
 
 	w.mu.Lock()
 	w.cache[key] = root
 	w.mu.Unlock()
-
-	return root
+	return root, nil
 }
 
-// findNearestMarker walks upward from dir, stopping at the first ancestor
-// containing any of markers. The walk never goes above fallbackRoot (if
-// given) so an unrelated marker file higher up the filesystem (e.g. in the
-// user's home directory) can never be mistaken for the project root; if
-// nothing is found by the time fallbackRoot itself has been checked, it
-// walks all the way to the filesystem root to support single-file / no
-// workspace-open sessions, same as VS Code's single-file mode.
-func findNearestMarker(dir string, markers []string, fallbackRoot string) string {
-	current := filepath.Clean(dir)
-	boundary := ""
-	if strings.TrimSpace(fallbackRoot) != "" {
-		boundary = filepath.Clean(fallbackRoot)
+// absolutePath canonicalizes a document URI filesystem path without requiring
+// the file to exist (new/unsaved documents are valid LSP inputs).
+func absolutePath(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("document path is empty")
 	}
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(absolute), nil
+}
 
+// absoluteDirectory validates an existing workspace directory before it is
+// used as an LSP working directory.
+func absoluteDirectory(path string) (string, error) {
+	absolute, err := absolutePath(path)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(absolute)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%s is not a directory", absolute)
+	}
+	return absolute, nil
+}
+
+func findNearestMarker(dir string, markers []string) string {
+	current := filepath.Clean(dir)
 	for {
 		for _, marker := range markers {
-			if _, err := os.Stat(filepath.Join(current, marker)); err == nil {
+			markerPath := filepath.Join(current, marker)
+			if info, err := os.Stat(markerPath); err == nil && !info.IsDir() {
 				return current
 			}
 		}
 
-		if boundary != "" && current == boundary {
-			break
-		}
-
 		parent := filepath.Dir(current)
 		if parent == current {
-			break // reached filesystem root
+			return ""
 		}
 		current = parent
 	}
-
-	return firstNonEmpty(fallbackRoot, dir)
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }

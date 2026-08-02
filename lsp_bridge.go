@@ -173,6 +173,14 @@ func (a *App) CreateLSPSession(lang, root string) (string, error) {
 		return "", fmt.Errorf("no LSP server registered for %s", lang)
 	}
 
+	// The bridge has no document URI from which it can recover a bad root, so
+	// reject it here rather than silently launching a server in MervCode's
+	// process directory (the previous behaviour for root=".").
+	root, err := absoluteDirectory(root)
+	if err != nil {
+		return "", fmt.Errorf("invalid LSP project root for %s: %w", lang, err)
+	}
+
 	if err := a.startLSPBridge(); err != nil {
 		return "", err
 	}
@@ -220,15 +228,16 @@ func (a *App) handleLSPWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	var resolvedCmd string
 	var resolvedArgs []string
+	var resolvedEnv []string
 
 	if tc.LSP.Resolve != nil {
-		cmd, args, err := tc.LSP.Resolve(bridge.ctx, sess.root)
+		cmd, args, env, err := tc.LSP.Resolve(bridge.ctx, sess.root)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusFailedDependency)
 			log.Printf("[LSP bridge] resolve %s: %v", sess.lang, err)
 			return
 		}
-		resolvedCmd, resolvedArgs = cmd, args
+		resolvedCmd, resolvedArgs, resolvedEnv = cmd, args, env
 	} else {
 		cmd, err := findToolBinary(tc.LSP.Command)
 		if err != nil {
@@ -236,7 +245,7 @@ func (a *App) handleLSPWebSocket(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[LSP bridge] %s: %v", sess.lang, err)
 			return
 		}
-		resolvedCmd, resolvedArgs = cmd, tc.LSP.Args
+		resolvedCmd, resolvedArgs, resolvedEnv = cmd, tc.LSP.Args, tc.LSP.Env
 	}
 
 	conn, err := wsUpgrader.Upgrade(w, r, nil)
@@ -254,8 +263,8 @@ func (a *App) handleLSPWebSocket(w http.ResponseWriter, r *http.Request) {
 	if sess.root != "" {
 		cmd.Dir = sess.root
 	}
-	if len(tc.LSP.Env) > 0 {
-		cmd.Env = append(os.Environ(), tc.LSP.Env...)
+	if len(resolvedEnv) > 0 {
+		cmd.Env = append(os.Environ(), resolvedEnv...)
 	}
 
 	stdin, err := cmd.StdinPipe()

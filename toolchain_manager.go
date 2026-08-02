@@ -21,33 +21,68 @@ import (
 // these directories — can appear "missing" even though they work fine
 // from a terminal.
 func findToolBinary(name string) (string, error) {
+	// Accept an explicit path directly.
+	if filepath.IsAbs(name) || strings.ContainsAny(name, `/\`) {
+		if info, err := os.Stat(name); err == nil && !info.IsDir() {
+			return filepath.Clean(name), nil
+		}
+	}
+
+	// System PATH.
 	if p, err := exec.LookPath(name); err == nil {
 		return p, nil
 	}
 
 	exeName := name
-	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(exeName), ".exe") {
+	if runtime.GOOS == "windows" &&
+		filepath.Ext(exeName) == "" {
 		exeName += ".exe"
 	}
 
 	var candidates []string
+
+	// Common Go installation locations.
 	if gobin := os.Getenv("GOBIN"); gobin != "" {
 		candidates = append(candidates, filepath.Join(gobin, exeName))
 	}
+
 	if gopath := os.Getenv("GOPATH"); gopath != "" {
 		candidates = append(candidates, filepath.Join(gopath, "bin", exeName))
 	}
+
 	if home, err := os.UserHomeDir(); err == nil {
 		candidates = append(candidates, filepath.Join(home, "go", "bin", exeName))
 	}
 
-	for _, c := range candidates {
-		if info, err := os.Stat(c); err == nil && !info.IsDir() {
-			return c, nil
+	// Bundled MervCode runtimes. Uses the language-specific resolvers
+	// (rather than resolveBundledRuntimeDir directly) so this automatically
+	// stays in sync with where each distribution actually lives nested
+	// under runtime/java and runtime/kotlin (jdtls/ and kotlin-lsp/
+	// respectively - see jdtls.go/kotlin.go).
+	for _, resolve := range []func() (string, error){resolveJDTLSRuntimeDir, resolveKotlinRuntimeDir} {
+		runtimeDir, err := resolve()
+		if err != nil {
+			continue
+		}
+
+		candidates = append(candidates,
+			filepath.Join(runtimeDir, "bin", exeName),
+			filepath.Join(runtimeDir, exeName),
+		)
+	}
+
+	for _, candidate := range candidates {
+		candidate = filepath.Clean(candidate)
+
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, nil
 		}
 	}
 
-	return "", fmt.Errorf("%s not found in PATH or common Go bin directories", name)
+	return "", fmt.Errorf(
+		"%q not found in PATH, bundled runtimes, or common Go bin directories",
+		name,
+	)
 }
 
 type ToolStatus struct {
@@ -80,17 +115,18 @@ func (a *App) CheckLanguageTools(lang string) (*ToolStatus, error) {
 	}
 
 	// Check LSP tool
-	if tc.LSP != nil {
-		if _, err := findToolBinary(tc.LSP.Command); err != nil {
-			status.MissingTools = append(status.MissingTools, tc.LSP.Command)
-		}
+	if tc.LSP != nil && !lspToolAvailable(tc.LSP) {
+		status.MissingTools = append(status.MissingTools, tc.LSP.Command)
 	}
 
 	// Check formatter tool
-	if tc.Formatter != nil {
-		if _, err := findToolBinary(tc.Formatter.Command); err != nil {
-			status.MissingTools = append(status.MissingTools, tc.Formatter.Command)
-		}
+	if tc.Formatter != nil && !formatterToolAvailable(tc.Formatter) {
+		status.MissingTools = append(status.MissingTools, tc.Formatter.Command)
+	}
+
+	// Check linter tool
+	if tc.Linter != nil && !linterToolAvailable(tc.Linter) {
+		status.MissingTools = append(status.MissingTools, tc.Linter.Command)
 	}
 
 	if len(status.MissingTools) == 0 {
@@ -190,17 +226,49 @@ func installTool(tc *LanguageToolchain, tool string) error {
 
 func missingTools(tc *LanguageToolchain) []string {
 	var missing []string
-	if tc.LSP != nil {
-		if _, err := findToolBinary(tc.LSP.Command); err != nil {
-			missing = append(missing, tc.LSP.Command)
-		}
+	if tc.LSP != nil && !lspToolAvailable(tc.LSP) {
+		missing = append(missing, tc.LSP.Command)
 	}
-	if tc.Formatter != nil {
-		if _, err := findToolBinary(tc.Formatter.Command); err != nil {
-			missing = append(missing, tc.Formatter.Command)
-		}
+	if tc.Formatter != nil && !formatterToolAvailable(tc.Formatter) {
+		missing = append(missing, tc.Formatter.Command)
+	}
+	if tc.Linter != nil && !linterToolAvailable(tc.Linter) {
+		missing = append(missing, tc.Linter.Command)
 	}
 	return missing
+}
+
+// formatterToolAvailable mirrors lspToolAvailable for formatters whose
+// "is it installed" check needs to be more involved than a plain PATH
+// lookup (e.g. a bundled jar plus a bundled JBR to run it with).
+func formatterToolAvailable(formatter *FormatterConfig) bool {
+	if formatter.IsAvailable != nil {
+		return formatter.IsAvailable()
+	}
+	_, err := findToolBinary(formatter.Command)
+	return err == nil
+}
+
+// linterToolAvailable mirrors lspToolAvailable for linters whose "is it
+// installed" check needs to be more involved than a plain PATH lookup.
+func linterToolAvailable(linter *LinterConfig) bool {
+	if linter.IsAvailable != nil {
+		return linter.IsAvailable()
+	}
+	_, err := findToolBinary(linter.Command)
+	return err == nil
+}
+
+// lspToolAvailable checks whether an LSP server can actually be launched:
+// its own IsAvailable check when one is provided (needed for servers like
+// the bundled JDTLS/Kotlin LSP, whose Command is just a placeholder, not
+// a real PATH binary), otherwise the plain PATH/GOPATH lookup.
+func lspToolAvailable(lsp *LSPConfig) bool {
+	if lsp.IsAvailable != nil {
+		return lsp.IsAvailable()
+	}
+	_, err := findToolBinary(lsp.Command)
+	return err == nil
 }
 
 func installCommandFor(binary string) string {

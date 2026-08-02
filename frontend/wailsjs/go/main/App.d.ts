@@ -35,6 +35,8 @@ export function InvalidateWorkspaceCache():Promise<void>;
 
 export function KillLSPServer(arg1:string):Promise<void>;
 
+export function LintDocument(arg1:string,arg2:string,arg3:string):Promise<Array<main.LintDiagnostic>>;
+
 export function ListLSPServers():Promise<Array<main.LSPServerInfo>>;
 
 export function OpenSettingsWindow():Promise<void>;

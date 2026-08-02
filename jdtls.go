@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,9 +20,9 @@ import (
 // entry in toolchain.go, which wires jdtlsAvailable/ResolveJDTLS in as
 // LSPConfig.IsAvailable/Resolve.
 //
-// Bundled runtime/java layout (versions vary between JDTLS releases):
+// Bundled runtime/java/jdtls layout (versions vary between JDTLS releases):
 //
-//	runtime/java/
+//	runtime/java/jdtls/
 //	├── config_win/config.ini        (Windows amd64)
 //	├── config_linux/config.ini      (Linux amd64)
 //	├── config_linux_arm/config.ini  (Linux arm64)
@@ -37,32 +35,22 @@ import (
 //	    └── org.eclipse.equinox.launcher.<platform>_<version>.jar (fragments - NOT this one)
 // ============================================================================
 
-// resolveJDTLSRuntimeDir locates the bundled runtime/java directory. It
-// tries, in order: next to the running executable (production build),
-// then relative to the current working directory (source tree / `wails
-// dev`), so it works whether MervCode is running built or from source.
+// resolveJDTLSRuntimeDir locates the bundled JDTLS distribution, nested
+// one level under runtime/java (runtime/java/jdtls) alongside any other
+// Java-related bundled tooling that may live under runtime/java in the
+// future.
 func resolveJDTLSRuntimeDir() (string, error) {
-	var candidates []string
-
-	if exePath, err := os.Executable(); err == nil {
-		exeDir := filepath.Dir(exePath)
-		candidates = append(candidates,
-			filepath.Join(exeDir, "runtime", "java"),
-			filepath.Join(exeDir, "resources", "runtime", "java"),
-		)
+	javaDir, err := resolveBundledRuntimeDir("java")
+	if err != nil {
+		return "", err
 	}
 
-	if wd, err := os.Getwd(); err == nil {
-		candidates = append(candidates, filepath.Join(wd, "runtime", "java"))
+	jdtlsDir := filepath.Join(javaDir, "jdtls")
+	if info, err := os.Stat(jdtlsDir); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("bundled JDTLS directory not found at %s", jdtlsDir)
 	}
 
-	for _, c := range candidates {
-		if info, err := os.Stat(c); err == nil && info.IsDir() {
-			return c, nil
-		}
-	}
-
-	return "", fmt.Errorf("JDTLS runtime directory not found (looked in: %s)", strings.Join(candidates, ", "))
+	return jdtlsDir, nil
 }
 
 // jdtlsConfigDirName maps the current OS/architecture to the matching
@@ -141,10 +129,7 @@ func jdtlsWorkspaceDir(projectRoot string) (string, error) {
 		return "", fmt.Errorf("resolve user cache directory: %w", err)
 	}
 
-	sum := sha1.Sum([]byte(filepath.Clean(projectRoot)))
-	hash := hex.EncodeToString(sum[:])[:16]
-
-	dir := filepath.Join(cacheDir, "MervCode", "jdtls-workspaces", hash)
+	dir := filepath.Join(cacheDir, "MervCode", "jdtls-workspaces", projectHash(projectRoot))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("create JDTLS workspace directory: %w", err)
 	}
@@ -190,36 +175,36 @@ func jdtlsAvailable() bool {
 // and a stable per-project workspace directory, then assembles the
 // standard JDTLS JVM arguments. The returned command/args are meant to be
 // used directly with exec.CommandContext - no shell wrapping.
-func ResolveJDTLS(_ context.Context, projectRoot string) (string, []string, error) {
+func ResolveJDTLS(_ context.Context, projectRoot string) (string, []string, []string, error) {
 	javaPath, err := findToolBinary("java")
 	if err != nil {
-		return "", nil, fmt.Errorf("Java runtime not found. JDTLS requires a compatible JDK - install one and ensure `java` is available on PATH: %w", err)
+		return "", nil, nil, fmt.Errorf("Java runtime not found. JDTLS requires a compatible JDK - install one and ensure `java` is available on PATH: %w", err)
 	}
 
 	runtimeDir, err := resolveJDTLSRuntimeDir()
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	configName, err := jdtlsConfigDirName()
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	configDir := filepath.Join(runtimeDir, configName)
 	configIni := filepath.Join(configDir, "config.ini")
 	if info, err := os.Stat(configIni); err != nil || info.IsDir() {
-		return "", nil, fmt.Errorf("JDTLS config.ini not found at %s", configIni)
+		return "", nil, nil, fmt.Errorf("JDTLS config.ini not found at %s", configIni)
 	}
 
 	launcherJar, err := findEquinoxLauncher(filepath.Join(runtimeDir, "plugins"))
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	workspaceDir, err := jdtlsWorkspaceDir(projectRoot)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	args := []string{
@@ -236,5 +221,5 @@ func ResolveJDTLS(_ context.Context, projectRoot string) (string, []string, erro
 		"-data", workspaceDir,
 	}
 
-	return javaPath, args, nil
+	return javaPath, args, nil, nil
 }

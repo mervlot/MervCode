@@ -14,19 +14,22 @@ export function applyLanguageFeatures(
   lang.setup?.();
   lang.diagnostics?.(model);
 
+  const cleanups: Array<() => void> = [];
+
   const lspCleanup = lang.lsp?.(editor, model, rootPath);
+  if (lspCleanup) cleanups.push(lspCleanup);
+
+  const linterCleanup = lang.linter?.(model);
+  if (linterCleanup) cleanups.push(linterCleanup);
 
   if (lang.formatter) {
     const formatterDisposable =
       monaco.languages.registerDocumentFormattingEditProvider(language, {
         provideDocumentFormattingEdits: (model) => lang.formatter!(model),
       });
-    const origCleanup = lspCleanup;
-    return () => {
-      origCleanup?.();
-      formatterDisposable.dispose();
-    };
+    cleanups.push(() => formatterDisposable.dispose());
   }
 
-  return lspCleanup;
+  if (cleanups.length === 0) return undefined;
+  return () => cleanups.forEach((cleanup) => cleanup());
 }

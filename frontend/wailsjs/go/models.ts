@@ -89,6 +89,30 @@ export namespace main {
 	        this.initializationOptions = source["initializationOptions"];
 	    }
 	}
+	export class LintDiagnostic {
+	    severity: string;
+	    message: string;
+	    ruleId?: string;
+	    line: number;
+	    column: number;
+	    endLine?: number;
+	    endColumn?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LintDiagnostic(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.severity = source["severity"];
+	        this.message = source["message"];
+	        this.ruleId = source["ruleId"];
+	        this.line = source["line"];
+	        this.column = source["column"];
+	        this.endLine = source["endLine"];
+	        this.endColumn = source["endColumn"];
+	    }
+	}
 	export class ResolvedReference {
 	    kind: string;
 	    target: string;
