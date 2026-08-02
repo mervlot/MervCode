@@ -211,11 +211,32 @@ func (a *App) handleLSPWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resolvedCmd, err := findToolBinary(tc.LSP.Command)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusFailedDependency)
-		log.Printf("[LSP bridge] %s: %v", sess.lang, err)
+	if tc.LSP.IsAvailable != nil && !tc.LSP.IsAvailable() {
+		msg := fmt.Sprintf("%s language server is not available", sess.lang)
+		http.Error(w, msg, http.StatusFailedDependency)
+		log.Printf("[LSP bridge] %s", msg)
 		return
+	}
+
+	var resolvedCmd string
+	var resolvedArgs []string
+
+	if tc.LSP.Resolve != nil {
+		cmd, args, err := tc.LSP.Resolve(bridge.ctx, sess.root)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusFailedDependency)
+			log.Printf("[LSP bridge] resolve %s: %v", sess.lang, err)
+			return
+		}
+		resolvedCmd, resolvedArgs = cmd, args
+	} else {
+		cmd, err := findToolBinary(tc.LSP.Command)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusFailedDependency)
+			log.Printf("[LSP bridge] %s: %v", sess.lang, err)
+			return
+		}
+		resolvedCmd, resolvedArgs = cmd, tc.LSP.Args
 	}
 
 	conn, err := wsUpgrader.Upgrade(w, r, nil)
@@ -229,7 +250,7 @@ func (a *App) handleLSPWebSocket(w http.ResponseWriter, r *http.Request) {
 	procCtx, cancel := context.WithCancel(bridge.ctx)
 	defer cancel()
 
-	cmd := exec.CommandContext(procCtx, resolvedCmd, tc.LSP.Args...)
+	cmd := exec.CommandContext(procCtx, resolvedCmd, resolvedArgs...)
 	if sess.root != "" {
 		cmd.Dir = sess.root
 	}

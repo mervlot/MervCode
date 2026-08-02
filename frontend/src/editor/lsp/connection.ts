@@ -29,7 +29,22 @@ export type ConnectionStatus =
   | "closed";
 
 const MAX_RESTARTS = 5;
-const REQUEST_TIMEOUT_MS = 10000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
+
+// JVM-based servers are legitimately much slower to respond than
+// gopls/typescript-language-server, especially on early requests while
+// they're still importing/indexing the project (Maven/Gradle dependency
+// resolution can easily take longer than 10s on its own). Using the
+// default timeout for them meant every hover/completion sent during that
+// window silently resolved to null - looking exactly like "hover doesn't
+// work at all" even though the server would have answered given more
+// time.
+const SLOW_SERVER_TIMEOUT_MS = 60000;
+const SLOW_SERVER_LANGS = new Set(["java", "kotlin"]);
+
+function requestTimeoutFor(lang: string): number {
+  return SLOW_SERVER_LANGS.has(lang) ? SLOW_SERVER_TIMEOUT_MS : DEFAULT_REQUEST_TIMEOUT_MS;
+}
 
 interface OpenDoc {
   languageId: string;
@@ -318,9 +333,9 @@ export class LSPConnection {
         this.sendRaw({ jsonrpc: "2.0", id, method, params });
 
         timeoutHandle = setTimeout(() => {
-          finish("timed-out", null, "no response within 10s");
+          finish("timed-out", null, `no response within ${requestTimeoutFor(this.lang) / 1000}s`);
           resolveTask(null);
-        }, REQUEST_TIMEOUT_MS);
+        }, requestTimeoutFor(this.lang));
       });
     });
 

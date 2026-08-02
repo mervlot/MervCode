@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -22,6 +23,21 @@ type LSPConfig struct {
 	// spawned server process, appended to the current process's
 	// environment (e.g. JAVA_HOME overrides for jdtls).
 	Env []string `json:"env,omitempty"`
+
+	// IsAvailable, if set, is a cheap (no network, no process spawn)
+	// check for whether this server can actually be launched right now.
+	// Used instead of the plain findToolBinary(Command) check for
+	// servers whose "is it installed" question is more involved than
+	// one binary on PATH (e.g. a bundled runtime with several required
+	// files). Optional - nil falls back to the plain PATH/GOPATH lookup.
+	IsAvailable func() bool `json:"-"`
+
+	// Resolve, if set, computes the actual command and arguments to
+	// launch for this specific project, overriding Command/Args
+	// entirely. Used for servers that need per-invocation values (e.g.
+	// jdtls's -data workspace directory, which must be project-specific).
+	// Optional - nil falls back to findToolBinary(Command) + Args as-is.
+	Resolve func(ctx context.Context, projectRoot string) (command string, args []string, err error) `json:"-"`
 }
 
 type FormatterConfig struct {
@@ -121,28 +137,21 @@ func init() {
 			ID:   "java",
 			Name: "Java",
 			LSP: &LSPConfig{
-				// Eclipse JDT Language Server. Most distributions
-				// (Homebrew, Scoop, the official download) install a
-				// `jdtls` wrapper script that already resolves its own
-				// -configuration/-data paths, so no extra args are
-				// required here.
-				Command: "jdtls",
-				Args:    []string{},
+				// JDTLS is bundled with MervCode under runtime/java (see
+				// jdtls.go) and launched directly via `java -jar
+				// <equinox launcher>`, not through the jdtls/jdtls.bat
+				// wrapper scripts. Command/Args are placeholders -
+				// Resolve computes the real invocation per project.
+				Command:     "java",
+				Args:        nil,
+				IsAvailable: jdtlsAvailable,
+				Resolve:     ResolveJDTLS,
 			},
 			Markers:           []string{"pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"},
 			RuntimeBinary:     "java",
 			RuntimeInstallURL: "https://adoptium.net/",
-			// There's no single cross-platform package manager for jdtls, so
-			// try the ones that might already be present in order, and fall
-			// back to a manual hint if neither is installed.
-			ToolInstallers: map[string][]ToolInstaller{
-				"jdtls": {
-					{Binary: "brew", Args: []string{"install", "jdtls"}},
-					{Binary: "scoop", Args: []string{"install", "jdtls"}},
-				},
-			},
 			ManualInstallHints: map[string]string{
-				"jdtls": "No Homebrew or Scoop found. Install manually from https://download.eclipse.org/jdtls/, or install Homebrew/Scoop first and try again.",
+				"java": "JDTLS is bundled with MervCode, but it needs a JDK to run. Install one from https://adoptium.net/ and make sure `java` is on PATH.",
 			},
 		},
 		"kotlin": {
