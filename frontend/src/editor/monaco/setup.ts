@@ -1,5 +1,7 @@
 import * as monaco from "monaco-editor";
 import { registerFileLinks } from "./linkProvider";
+import { conf as tsConf, language as tsLanguage } from "monaco-editor/esm/vs/basic-languages/typescript/typescript";
+import { conf as jsConf, language as jsLanguage } from "monaco-editor/esm/vs/basic-languages/javascript/javascript";
 
 let initialized = false;
 
@@ -34,6 +36,14 @@ export function setupMonaco() {
   });
 
   monaco.editor.setTheme("merv-dark");
+
+  monaco.languages.register({ id: "typescriptreact", extensions: [".tsx"], aliases: ["TSX"] });
+  monaco.languages.setLanguageConfiguration("typescriptreact", tsConf);
+  monaco.languages.setMonarchTokensProvider("typescriptreact", tsLanguage);
+
+  monaco.languages.register({ id: "javascriptreact", extensions: [".jsx"], aliases: ["JSX"] });
+  monaco.languages.setLanguageConfiguration("javascriptreact", jsConf);
+  monaco.languages.setMonarchTokensProvider("javascriptreact", jsLanguage);
 
   // Monaco bundles its own standalone TypeScript worker (wired up in
   // main.tsx) that runs independently of our external

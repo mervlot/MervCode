@@ -12,12 +12,12 @@ const filenameMap: Record<string, string> = {
 
 const extensionMap: Record<string, string> = {
   js: "javascript",
-  jsx: "javascript",
+  jsx: "javascriptreact",
   mjs: "javascript",
   cjs: "javascript",
 
   ts: "typescript",
-  tsx: "typescript",
+  tsx: "typescriptreact",
   mts: "typescript",
   cts: "typescript",
 

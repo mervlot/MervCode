@@ -45,13 +45,6 @@ export default function AndroidPanel({ onBack }: AndroidPanelProps) {
 
         <div className='flex gap-1'>
           <button
-            onClick={loadDevices}
-            className='text-xs px-2 py-1 rounded hover:bg-hover'
-          >
-            Refresh
-          </button>
-
-          <button
             onClick={onBack}
             className='text-xs px-2 py-1 rounded hover:bg-hover'
           >
@@ -60,6 +53,22 @@ export default function AndroidPanel({ onBack }: AndroidPanelProps) {
         </div>
       </div>
 
+{/*ADB*/}
+      <div className='flex items-center justify-between px-3 py-2 border-b border-subtle'>
+        <span className='text-[11px] uppercase tracking-wider text-tertiary'>
+          ADB
+        </span>
+
+        <div className='flex gap-1'>
+          <button
+            onClick={loadDevices}
+            className='text-xs px-2 py-1 rounded hover:bg-hover'
+          >
+            Refresh
+          </button>
+
+        </div>
+      </div>
       <div className='flex-1 overflow-auto'>
         {loading ? (
           <div className='p-4 text-sm text-tertiary'>Detecting devices...</div>
@@ -102,6 +111,18 @@ export default function AndroidPanel({ onBack }: AndroidPanelProps) {
           ))
         )}
       </div>
+{/*Build*/}
+        <div className='flex items-center justify-between px-3 py-2 border-b border-subtle'>
+        <span className='text-[11px] uppercase tracking-wider text-tertiary'>
+          Build
+        </span>
+
+        <div className='flex gap-1'>
+         
+
+        </div>
+      </div>
+
     </div>
   );
 }
