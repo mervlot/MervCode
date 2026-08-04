@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -56,26 +57,47 @@ func (a *App) StartTerminal(id string, shell string) error {
 
 	terminals[id] = &termSession{pty: ptyInstance, shell: shell}
 
-	go func(id string, ptyInstance *conpty.ConPty) {
-		buf := make([]byte, 8192)
-
-		for {
-			n, err := ptyInstance.Read(buf)
-			if err != nil {
-				runtime.EventsEmit(a.ctx, "terminal:exit:"+id)
-				terminalMu.Lock()
-				delete(terminals, id)
-				terminalMu.Unlock()
-				return
-			}
-
-			if n > 0 {
-				runtime.EventsEmit(a.ctx, "terminal:output:"+id, string(buf[:n]))
-			}
-		}
-	}(id, ptyInstance)
+	go a.pipeTerminalOutput(id, ptyInstance)
+	go a.waitTerminalExit(id, ptyInstance)
 
 	return nil
+}
+
+func (a *App) pipeTerminalOutput(id string, ptyInstance *conpty.ConPty) {
+	buf := make([]byte, 8192)
+	for {
+		n, err := ptyInstance.Read(buf)
+		if n > 0 {
+			runtime.EventsEmit(a.ctx, "terminal:output:"+id, string(buf[:n]))
+		}
+		if err != nil {
+			// The PTY output pipe closes during normal process shutdown too. The
+			// waitTerminalExit goroutine owns deletion + terminal:exit so the frontend
+			// gets exactly one authoritative exit event with the real code.
+			return
+		}
+	}
+}
+
+func (a *App) waitTerminalExit(id string, ptyInstance *conpty.ConPty) {
+	exitCode, err := ptyInstance.Wait(context.Background())
+	// Once the child process is gone, close remaining PTY handles so the read
+	// goroutine unblocks. Without this, Ctrl+C / interrupted CLIs can appear to
+	// "hang" even though the child process has already returned an exit code.
+	_ = ptyInstance.Close()
+
+	terminalMu.Lock()
+	delete(terminals, id)
+	terminalMu.Unlock()
+
+	payload := map[string]any{
+		"exitCode": exitCode,
+		"ok":       err == nil && exitCode == 0,
+	}
+	if err != nil {
+		payload["error"] = err.Error()
+	}
+	runtime.EventsEmit(a.ctx, "terminal:exit:"+id, payload)
 }
 
 func (a *App) TerminalInput(id string, input string) error {
@@ -84,7 +106,10 @@ func (a *App) TerminalInput(id string, input string) error {
 	terminalMu.Unlock()
 
 	if sess == nil {
-		return errors.New("terminal is not running")
+		// Input can race with a process exiting (especially Ctrl+C / Ctrl+D style
+		// shutdown paths). Treat it as a no-op instead of surfacing repeated
+		// "terminal is not running" errors in the frontend log.
+		return nil
 	}
 
 	_, err := sess.pty.Write([]byte(input))

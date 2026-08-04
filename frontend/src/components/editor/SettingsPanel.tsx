@@ -12,6 +12,7 @@ import {
 interface SettingsPanelProps {
   settings: EditorSettings;
   onSettingsChange: (patch: Partial<EditorSettings>) => void;
+  onSettingsReset: () => void;
 }
 
 const SHORTCUTS: [string, string][] = [
@@ -130,6 +131,7 @@ function ShortcutsSection() {
 export default function SettingsPanel({
   settings,
   onSettingsChange,
+  onSettingsReset,
 }: SettingsPanelProps) {
   const [activeSectionId, setActiveSectionId] = useState(
     SETTINGS_SECTIONS[0]?.id ?? "editor",
@@ -182,9 +184,19 @@ export default function SettingsPanel({
     <div className="flex h-full flex-col overflow-hidden bg-canvas">
       {/* Header */}
       <div className="shrink-0 border-b border-subtle bg-panel px-5 py-3">
-        <div className="mb-3 flex items-center gap-2">
-          <i className="bi bi-gear text-[14px] text-accent" />
-          <h1 className="text-[13px] font-semibold text-primary">Settings</h1>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <i className="bi bi-gear text-[14px] text-accent" />
+            <h1 className="text-[13px] font-semibold text-primary">Settings</h1>
+          </div>
+          <button
+            type="button"
+            onClick={onSettingsReset}
+            className="rounded-md border border-subtle px-2 py-1 text-[11px] text-tertiary transition-colors hover:border-(--accent-border) hover:bg-(--bg-hover) hover:text-primary"
+            title="Restore editor and terminal settings to defaults"
+          >
+            Reset Defaults
+          </button>
         </div>
         <div className="relative">
           <i className="bi bi-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[12px] text-tertiary" />

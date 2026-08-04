@@ -8,6 +8,8 @@ import TerminalPanel from "./TerminalPanel";
 import ErrorBoundary from "./ErrorBoundary";
 import ToolchainPrompt from "./ToolchainPrompt";
 import { CheckLanguageTools } from "../../../wailsjs/go/main/App";
+import { detectLang } from "../../editor/detectLang";
+import { languageLabel, toolchainLanguageId } from "../../editor/languageIds";
 import type { EditorSettings, FileTab } from "../../types";
 import type { ContextMenuState } from "../../hooks/useTabManager";
 
@@ -18,6 +20,7 @@ interface EditorAreaProps {
   language: string;
   settings: EditorSettings;
   onSettingsChange: (patch: Partial<EditorSettings>) => void;
+  onSettingsReset: () => void;
   cursor: { line: number; column: number };
   setCursor: React.Dispatch<
     React.SetStateAction<{ line: number; column: number }>
@@ -67,6 +70,7 @@ export default function EditorArea({
   language,
   settings,
   onSettingsChange,
+  onSettingsReset,
   cursor,
   setCursor,
   activeFile,
@@ -99,16 +103,28 @@ export default function EditorArea({
   useEffect(() => {
     if (!language || language === "plaintext") return;
 
-    CheckLanguageTools(language)
+    // Monaco has four concrete TypeScript-family IDs, but the backend exposes
+    // one shared `typescript` toolchain. Prompt/check the canonical toolchain
+    // so .jsx/.tsx never ask Go for nonexistent `javascriptreact` or
+    // `typescriptreact` toolchains.
+    const toolchainLang = toolchainLanguageId(language);
+
+    console.log(
+      `[toolchain] check active language=${languageLabel(language)} (${language}) via toolchain=${toolchainLang}`,
+    );
+
+    CheckLanguageTools(toolchainLang)
       .then((status) => {
         const needsPrompt =
           !status.languageInstalled ||
           (!status.toolsInstalled && (status.missingTools?.length ?? 0) > 0);
         if (needsPrompt) {
-          setToolchainLang(language);
+          setToolchainLang(toolchainLang);
         }
       })
-      .catch(() => undefined);
+      .catch((err) => {
+        console.warn(`[toolchain] check failed for ${toolchainLang}:`, err);
+      });
   }, [language, activePath]);
 
   return (
@@ -166,9 +182,10 @@ export default function EditorArea({
               >
                 <FileViewer
                   tab={t}
-                  language={language}
+                  language={detectLang(t.name)}
                   settings={settings}
                   onSettingsChange={onSettingsChange}
+                  onSettingsReset={onSettingsReset}
                   onCursorChange={setCursor}
                   onEditorReady={onEditorReady}
                   onChange={onChange}
@@ -184,6 +201,11 @@ export default function EditorArea({
         <TerminalPanel
           visible={terminalOpen}
           defaultShell={settings.defaultShell}
+          fontSize={settings.terminalFontSize}
+          fontFamily={settings.terminalFontFamily}
+          cursorBlink={settings.terminalCursorBlink}
+          scrollback={settings.terminalScrollback}
+          configuredHeight={settings.terminalHeight}
         />
       </div>
     </main>

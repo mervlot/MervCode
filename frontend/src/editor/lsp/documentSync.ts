@@ -24,13 +24,23 @@ export function wireDocumentSync(
   uri: string,
   languageId: string,
 ): () => void {
+  console.log(
+    `[lsp-sync] didOpen queued uri=${uri} documentLanguage=${languageId} connection=${connection.connectionId}`,
+  );
   connection.openDocument(uri, languageId, model);
 
   const subscription = model.onDidChangeContent((event) => {
-    connection.changeDocument(uri, toContentChanges(connection, model, event));
+    const changes = toContentChanges(connection, model, event);
+    console.log(
+      `[lsp-sync] didChange queued uri=${uri} version+1 changes=${changes.length} syncKind=${connection.capabilities.syncKind}`,
+    );
+    connection.changeDocument(uri, changes);
   });
 
-  return () => subscription.dispose();
+  return () => {
+    console.log(`[lsp-sync] sync disposed uri=${uri} connection=${connection.connectionId}`);
+    subscription.dispose();
+  };
 }
 
 function toContentChanges(

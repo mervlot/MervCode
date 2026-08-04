@@ -11,7 +11,7 @@ the app (on Windows, WebView2's per-user-data-folder profile).
 | Key                          | Written by                                   | Contents |
 |-------------------------------|-----------------------------------------------|----------|
 | `mervcode.workspace-state`    | `frontend/src/lib/persistence.ts`             | `{ activePath, tabs, rootPath }` - the open tabs, which one is active, and the last opened project folder. |
-| `mervcode:editorSettings`     | `frontend/src/hooks/useEditorSettings.ts`     | The full `EditorSettings` object (font, tab size, minimap, word wrap, ...) shown in the Settings panel. |
+| `mervcode:editorSettings`     | `frontend/src/hooks/useEditorSettings.ts`     | The full `EditorSettings` object (editor and terminal settings) shown in the Settings panel. Saved settings are deep-merged with defaults. |
 | `mervcode:theme`              | `frontend/src/contexts/ThemeContext.tsx`      | `"dark"` or `"light"`. |
 
 All three are read/written directly via `window.localStorage` - see
@@ -54,7 +54,7 @@ kept in sync any time you open a different folder through the Explorer's
 "Open Folder" action or the `mervcode:open-folder` window event (Header's
 "Open Folder" button / `Ctrl+O`-style flows dispatch this).
 
-## Inspecting or resetting it
+## Inspecting or resetting workspace state
 
 Open MervCode's Dev Tools (the LSP Inspector's underlying webview devtools,
 or attach an external one) and run in the console:
@@ -70,8 +70,26 @@ a folder that no longer exists), clear just that key:
 localStorage.removeItem("mervcode.workspace-state")
 ```
 
-This does not touch editor settings or theme, which are stored under their
+This does not touch editor/terminal settings or theme, which are stored under their
 own separate keys listed above.
+
+## Inspecting or resetting editor and terminal settings
+
+Settings are stored together under:
+
+```js
+JSON.parse(localStorage.getItem("mervcode:editorSettings"))
+```
+
+The Settings UI has a **Reset Defaults** button. To reset manually in DevTools:
+
+```js
+localStorage.removeItem("mervcode:editorSettings")
+```
+
+Restart or reload the app after manual edits. Defaults are defined in
+`frontend/src/hooks/useEditorSettings.ts` and deep-merged with saved settings so
+new nested fields are added without deleting existing preferences.
 
 ## Why this is `localStorage` and not a Go-side file
 

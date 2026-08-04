@@ -1,170 +1,168 @@
 # LSP Architecture
 
-How MervCode talks to language servers, end to end: workspace resolution,
-transport, connection lifecycle, document sync, providers, and the
-developer-facing inspector. This is the subsystem behind Go, TypeScript/
-JavaScript, Java and Kotlin support today.
+How MervCode talks to language servers end to end: language detection, workspace resolution, transport, connection lifecycle, active-tab document sync, providers, logging, and the developer-facing inspector.
 
 ## Overview
 
 ```mermaid
 flowchart TD
-    A[Monaco editor model] --> B[editor/lsp/index.ts openLSPDocument]
-    B --> C[connectionRegistry: resolveProjectRoot]
-    C -->|Go: ResolveProjectRoot| D[workspace.go findNearestMarker]
-    B --> E[connectionRegistry: getConnection lang+root]
-    E --> F[LSPConnection]
-    F --> G[WebSocketTransport]
-    G -->|ws://127.0.0.1:PORT/lsp?token| H[lsp_bridge.go]
-    H --> I[Language server process]
-    F --> J[RequestScheduler]
-    F --> K[ServerCapabilities]
-    F --> L[lspLogger]
-    L --> M[LSP Inspector panel]
+    A[File tab / Monaco model] --> B[detectLang]
+    B --> C[Monaco language module]
+    C --> D[openLSPDocument]
+    D --> E[resolveProjectRoot]
+    E --> F[workspace.go marker walk]
+    D --> G[getConnection server+root]
+    G --> H[LSPConnection]
+    H --> I[WebSocketTransport]
+    I --> J[lsp_bridge.go]
+    J --> K[stdio language server]
+    H --> L[RequestScheduler]
+    H --> M[ServerCapabilities]
+    H --> N[lspLogger]
+    N --> O[LSP Inspector]
 ```
+
+## Language identity
+
+Monaco language IDs and backend toolchain IDs are related but not always identical.
+
+The TypeScript family keeps four Monaco IDs:
+
+- `typescript`
+- `typescriptreact`
+- `javascript`
+- `javascriptreact`
+
+All four map to backend toolchain `typescript`. This allows Monaco grammar/tokenization and LSP `didOpen.languageId` to stay concrete while using the same backend LSP/formatter/linter tools.
+
+Mapping files:
+
+- `frontend/src/editor/detectLang.ts`
+- `frontend/src/editor/languageIds.ts`
+- backend `canonicalToolchainLang()` in `toolchain.go`
+
+## Active-tab LSP lifecycle
+
+MervCode renders hidden editor tabs to preserve state, but LSP/lint features attach only for the active tab. This prevents background tabs from starting duplicate language servers or opening duplicate documents.
+
+Lifecycle in `frontend/src/pages/Editor.tsx`:
+
+1. Monaco model is created/reused for every tab.
+2. If the tab is inactive, LSP/lint features are suspended.
+3. When the tab becomes active, `applyLanguageFeatures()` wires LSP/lint/formatter for that model.
+4. When the tab becomes inactive or changes root/language, cleanup closes the LSP document and clears lint markers.
+5. Connections remain cached per `(language, root)` and can be reused by later active files.
+
+This is especially important for Java/Kotlin because JDTLS and JetBrains Kotlin LSP use workspace data paths that cannot safely be opened by multiple duplicate server processes.
 
 ## Project root resolution (`workspace.go`)
 
-Every file resolves its **own** nearest project root before a connection is
-opened, instead of the whole app sharing one global "workspace root" (the
-folder opened via *Open Folder*). `ResolveProjectRoot(lang, filePath,
-fallbackRoot)` walks up from the file's directory looking for that
-language's marker files (`toolchain.go`'s `Markers`, e.g. `package.json`
-for TypeScript, `go.mod` for Go), stopping at `fallbackRoot` as a boundary
-so an unrelated marker higher up the filesystem is never mistaken for the
-project root. Results are cached per `(lang, directory)`.
+`ResolveProjectRoot(lang, filePath, fallbackRoot)` walks up from the file directory looking for marker files configured in `toolchain.go`.
 
-This is what makes multi-root workspaces work with zero explicit
-configuration: a monorepo with `backend/go.mod` and `frontend/package.json`
-opened as one folder gets two language servers, each rooted at its own
-subdirectory - not both rooted at the repo root (which is why
-`node_modules` resolution used to fail for anything but a single-package
-repo).
+Examples:
 
-`InvalidateWorkspaceCache()` clears the cache (call after operations that
-create/remove marker files, e.g. `npm init`, checking out a branch).
+- Go: `go.mod`
+- TypeScript: `package.json`, `tsconfig.json`, `jsconfig.json`
+- Java/Kotlin: Gradle/Maven/KPM marker files
 
-## Transport (`lsp_bridge.go` + `editor/lsp/transport.ts`)
+The result becomes the language server process working directory and LSP `rootUri`/`workspaceFolders` root.
 
-Monaco can't speak stdio, and language servers only speak LSP's
-`Content-Length`-framed protocol over stdio. `lsp_bridge.go` is the
-translation layer: a loopback-only WebSocket server (spun up lazily on
-first use) that, per connection, spawns the requested language's server
-process (looked up from `toolchain.go`) with its working directory set to
-the resolved project root, and shuttles bytes in both directions,
-converting framing.
+## Transport (`lsp_bridge.go` + `transport.ts`)
 
-Each server process is tracked as an `LSPServerInfo` (id, lang, root,
-command, pid, status) and its lifecycle is published as Wails events
-(`lsp:serverStarted`, `lsp:serverStopped`, `lsp:serverLog`) - this is the
-backend half of the LSP Inspector's "Running LSPs" and "Logs" views. The
-frontend's `WebSocketTransport` only knows `{send, onMessage, onClose,
-close}` - it has no LSP-specific knowledge, which is what would let an
-alternate transport (raw TCP to a remote `clangd`, attaching to an
-already-running server, etc.) be added later without touching
-`connection.ts`.
+The frontend sends JSON-RPC text frames through a local loopback WebSocket. The Go bridge converts WebSocket messages to LSP `Content-Length` stdio frames, spawns the language server, and forwards server responses back to the browser.
 
-## Connection lifecycle (`editor/lsp/connection.ts`)
+Key properties:
 
-One `LSPConnection` per `(language, resolved root)`, cached in
-`connectionRegistry.ts` and shared by every open file in that project
-(matching how a real server process is shared). It owns:
+- Loopback-only WebSocket server.
+- One-shot random token per session.
+- Per-session server process tracking.
+- Structured server lifecycle events:
+  - `lsp:serverStarted`
+  - `lsp:serverStopped`
+  - `lsp:serverLog`
+- Full request/notification/response logging with document text summarized.
 
-- **Capability negotiation** (`capabilities.ts`): the `initialize`
-  response's `ServerCapabilities` are parsed once and exposed as simple
-  booleans (`hover`, `completion`, `definition`, `references`,
-  `completionResolve`, `syncKind`). Providers check these before ever
-  sending a request, instead of registering blindly and hoping.
-- **Document sync** (`documentSync.ts`): Monaco's `onDidChangeModelContent`
-  already reports exact edit ranges in an order safe to apply
-  sequentially - that's mapped directly to LSP's incremental
-  `TextDocumentContentChangeEvent[]` (no diffing needed). Falls back to
-  whole-document sync automatically if the server only declared
-  `TextDocumentSyncKind.Full`.
-- **Request scheduling** (`requestScheduler.ts`): outgoing requests are
-  ordered by priority (`interactive` > `navigation` > `bulk`) and capped at
-  6 concurrent per connection, so a burst of formatting/workspace-symbol
-  requests can never starve hover/completion, and a flood-prone server
-  never gets more than a handful of requests at once.
-- **Cancellation**: every `requestCancellable()` call returns a `cancel()`
-  handle. Monaco's `CancellationToken` is wired to it directly, and
-  same-kind requests against the same document (`supersedeKey`, e.g.
-  `hover:<uri>`) automatically cancel their predecessor - this is what
-  stops a slow hover response from a previous keystroke overwriting a
-  newer one. Cancelling a request that's still queued (not yet dispatched)
-  removes it from the scheduler for free; an in-flight one gets a real
-  `$/cancelRequest` notification.
-- **Crash recovery**: an unexpected socket close triggers a
-  backoff-reconnect (`500ms * 2^attempt`, capped at 30s) that
-  re-initializes and replays `didOpen` for every currently-open document.
-  After 5 consecutive failures the connection marks itself `disabled` and
-  stops retrying automatically - visible (and manually restartable) from
-  the LSP Inspector's Servers tab.
+## Connection lifecycle (`connection.ts`)
 
-## Dev Tools / LSP Inspector
+`LSPConnection` owns:
 
-`editor/lsp/logger.ts` is a dependency-free, ring-buffered log
-(`lspLogger`) that every connection reports to: every request (with
-timing and status), every notification (in/out), every server stderr
-line, and every lifecycle event (connecting/ready/crashed/disabled).
-`components/editor/LspInspector.tsx` is the panel that reads it, plus
-polls `ListLSPServers()` (Go process view) and `connectionRegistry`'s
-snapshots (protocol view) while open.
+- WebSocket connection lifecycle.
+- `initialize`/`initialized` handshake.
+- Capability parsing.
+- Request IDs and pending responses.
+- Request scheduling and cancellation.
+- Document open/change/close.
+- Diagnostics fanout.
+- Crash/reconnect handling.
 
-Open it via the Command Palette (**Developer: Toggle LSP Inspector**) or
-`Ctrl+Shift+L`. Sections: Running LSPs, Open Documents, Capabilities,
-Requests (master-detail, full request/response JSON), Notifications,
-Diagnostics, Performance (per-method latency/error/cancel counts), Logs.
+One connection is cached per `(server language, root)` by `connectionRegistry.ts`.
 
-## Module map
+## Request scheduling and cancellation
 
-```
-frontend/src/editor/lsp/
-├── protocol.ts          JSON-RPC / LSP wire types
-├── uri.ts                path <-> file:// URI helpers
-├── logger.ts             Dev Tools / LSP Inspector event log
-├── requestScheduler.ts   priority + concurrency-limited request queue
-├── capabilities.ts       normalized ServerCapabilities
-├── transport.ts          WebSocket wire I/O
-├── connection.ts         per (language, root) orchestrator + crash recovery
-├── documentSync.ts       Monaco model changes -> LSP didChange deltas
-├── providers.ts          Monaco hover/completion/definition/reference providers
-├── diagnostics.ts        LSP Diagnostic -> Monaco marker mapping
-├── connectionRegistry.ts connection cache + project root resolution
-└── index.ts              public entry point (openLSPDocument)
-```
+`RequestScheduler` prioritizes interactive requests over bulk work and caps concurrent requests. Hover and completion are cancellable and supersede older requests for the same URI.
 
-`index.ts` is the only file language modules under
-`editor/monaco/languages/*.ts` import from - everything else is an
-internal implementation detail. Adding a new language still only requires
-following the steps in the top-level `AGENTS.md`; nothing above changes.
+Expected cancellation responses such as LSP `-32800 cancelled` are normal during mouse movement/typing and are logged at debug level when stale.
 
-## Language profiles (`toolchain.go`)
+## Providers (`providers.ts`)
 
-`LSPConfig` carries optional `InitializationOptions` and `Env`, exposed to
-the frontend via `GetLanguageProfile(lang)` and merged into the
-`initialize` request's `initializationOptions`. Adding a language-specific
-setting (e.g. `rust-analyzer`'s `cargo`/`checkOnSave` config) is a
-`toolchain.go` edit, not a TypeScript one.
+Monaco providers are registered once per Monaco language ID. They do not close over a single connection. Instead, each provider call looks up the document URI's current connection.
 
-## What's intentionally not built yet
+Supported providers today:
 
-Kept out of this pass to avoid piling abstraction on top of a subsystem
-that needed to be correct first - see `FeatureMatrix.md` for the full
-picture:
+- Hover
+- Completion
+- Definition
+- References
+- Diagnostics via `publishDiagnostics`
 
-- A generic **Transport** abstraction beyond stdio-over-WebSocket (TCP,
-  named pipes, remote/SSH) - the seam exists (`Transport` interface) but
-  only `WebSocketTransport` is implemented.
-- A **Plugin API** (`registerLanguage`/`registerCommand`/etc.) - languages
-  are still registered by editing `toolchain.go` + `registry.ts` per the
-  existing convention.
-- A workspace-wide **file/symbol index** for fast `Ctrl+P`/`Ctrl+T`.
-- A cross-cutting **background job manager** unifying indexing/git/search/
-  LSP/formatting under one scheduler - the new `RequestScheduler` only
-  covers LSP requests.
-- A **file cache** layer between disk and Monaco/LSP.
-- **Mock LSP servers** for testing the client without installing real
-  toolchains.
-- **Session persistence** beyond the existing tabs/active file/root path
-  (cursor, scroll, folding, splits, terminal, recent projects).
+## Document sync (`documentSync.ts`)
+
+Monaco emits exact edit ranges. These are converted to LSP incremental `TextDocumentContentChangeEvent` values when supported, otherwise full-document sync is used.
+
+Document sync logs include didOpen/didChange/didClose details and the owning connection id.
+
+## Language profiles
+
+`GetLanguageProfile(lang)` exposes backend LSP profile data to the frontend:
+
+- markers
+- initialization options
+
+TypeScript uses this to provide a fallback `tsserver.path` for JS/JSX projects that do not install TypeScript locally.
+
+## Inspector
+
+The LSP Inspector (`Ctrl+Shift+L`) shows:
+
+- Running LSP server processes.
+- Open documents.
+- Capabilities.
+- Requests and responses.
+- Notifications.
+- Diagnostics.
+- Performance stats.
+- Server logs.
+
+## Logging tags
+
+| Prefix | Meaning |
+| --- | --- |
+| `[lsp]` | Connection lifecycle. |
+| `[lsp ↑]` | Frontend to bridge/server JSON-RPC. |
+| `[lsp ↓]` | Server/bridge to frontend JSON-RPC. |
+| `[lsp-sync]` | Document sync lifecycle. |
+| `[lint]` | Linter runner. |
+| `[monaco]` | Editor/model lifecycle. |
+| `[backend]` | Wails backend call tracing or Go logs. |
+
+## Known limitations
+
+See `FeatureMatrix.md` for the roadmap. Notable missing pieces:
+
+- Completion resolve.
+- Signature help.
+- Rename/code actions/workspace edits.
+- LSP semantic token application.
+- Document/workspace symbols.
+- Dynamic capability registration.
+- Progress UI.

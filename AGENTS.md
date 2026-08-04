@@ -1,248 +1,243 @@
 # MervCode Project Guidelines
 
+These instructions apply to this repository. They override any more general personal instructions when they conflict.
+
+## Project identity
+
+MervCode is a native desktop IDE, not a web app. It is built with Wails v2, a Go backend, a React/TypeScript frontend, Monaco Editor, and an xterm/ConPTY integrated terminal.
+
+## Tools and package managers
+
+Use these tools and assume they are part of the project workflow:
+
+- **Go** 1.23+
+- **Wails v2**
+- **pnpm** for Wails frontend install/build/dev hooks
+- **npm** may be used for one-off frontend validation with `npm --prefix frontend ...`
+- **TypeScript**
+- **React**
+- **Vite**
+- **Tailwind CSS 4**
+- **Biome** for frontend lint/format checks
+- **Monaco Editor**
+- **xterm.js**
+- **motion/react**
+- **Bootstrap Icons**
+- **lucide-react**
+- **material-icon-theme**
+
+External language tools used by MervCode:
+
+- Go: `gopls`, `gofmt`, `golangci-lint`
+- TypeScript/JavaScript/TSX/JSX: `typescript-language-server`, `typescript`, `prettier`, `eslint`
+- Java: bundled JDTLS, `google-java-format`, Checkstyle
+- Kotlin: bundled JetBrains Kotlin LSP, `ktfmt`, `ktlint`
+
+## Do not run
+
+- **Never run `wails dev` automatically.** It disrupts the running desktop app. Ask first if a dev server/app session is truly needed.
+- Do not start long-running watchers or servers unless explicitly requested.
+- Do not commit changes or create branches unless requested.
+
+## Preferred validation commands
+
+From `mervcode/`:
+
+```sh
+go test ./...
+npm --prefix frontend run typecheck
+npm --prefix frontend run lint
+pnpm --dir frontend run typecheck
+pnpm --dir frontend run lint
+```
+
+Use `gofmt -w <files>` for Go files.
+
+`npm --prefix frontend run lint` may currently surface broad pre-existing Biome/config/format issues. If it fails, report whether touched files are clean separately rather than applying unrelated mass formatting.
+
 ## Architecture
 
-- **Stack**: Wails v2 (Go backend + React/TypeScript frontend) + Monaco Editor
-- **Desktop-first**: Native desktop IDE, not a web app
-- **Frameless**: Custom title bar and window controls
-- **Plugin system**: Languages defined in `toolchain.go` (backend) + `editor/monaco/languages/` (frontend)
+- **Backend**: Go + Wails bindings.
+- **Frontend**: React + TypeScript + Monaco + Tailwind.
+- **Desktop runtime**: Wails WebView2 on Windows.
+- **LSP**: Frontend WebSocket transport -> Go `lsp_bridge.go` -> stdio language server.
+- **Toolchains**: Central registry in `toolchain.go`.
+- **Workspace root resolution**: `workspace.go` resolves nearest project marker per file/language.
+- **Terminal**: `terminal.go` uses ConPTY; `TerminalPanel.tsx` uses xterm.
+- **Settings**: `EditorSettings` in `frontend/src/types.ts`, defaults in `useEditorSettings.ts`, UI schema in `editor/settingsSchema.ts`, Monaco mapping in `editor/monaco/toMonacoOptions.ts`.
 
-## General
+## Key source map
 
-- MervCode is a native desktop IDE focused on performance and responsiveness
-- Prioritize maintainability over clever implementations
-- Avoid introducing new dependencies unless they provide significant value
-- Follow existing code style and architecture
-- Reuse existing components before creating new ones
-
-## UI/UX Philosophy
-
-### Design Language
-
-- **Modern but nostalgic**: Clean, minimal interface with familiar IDE patterns devs expect
-- **Dark theme default**: Pure black background (`#000000`), crimson red accent (`#DC143C`)
-- **Custom cursors**: Use provided `.cur` files for different interaction states
-- **Monaspace font**: With ligatures enabled for better code readability
-- **Consistent spacing**: Use Tailwind's spacing scale (4px base unit)
-
-### Component Patterns
-
-- **Sidebar**: Collapsible, resizable (160-500px), with tab-based panels (explorer, search, git, settings)
-- **Editor tabs**: Draggable, context menus, dirty indicators, close buttons
-- **Status bar**: Bottom bar showing file type, cursor position, unsaved count
-- **Settings panel**: Sectioned with headers, toggles for booleans, sliders for numbers, dropdowns for enums
-- **Modals/dialogs**: Centered overlays with dark backdrop, consistent button styles
-
-### Interaction Patterns
-
-- **Keyboard shortcuts**: Follow VSCode conventions (Ctrl+Shift+P, Ctrl+S, Ctrl+W, Ctrl+`, Ctrl+B, Ctrl+Tab)
-- **Command palette**: Fuzzy search for commands and files
-- **Context menus**: Right-click on tabs, files, editor
-- **Drag-and-drop**: Tabs reorderable, sidebar resizable
-- **Live feedback**: Status bar updates, dirty indicators, loading states
-
-### Visual Consistency
-
-- **Borders**: Subtle (`rgba(255,255,255,0.08)`), stronger on focus/hover
-- **Text hierarchy**: Primary (92% opacity), secondary (60%), tertiary (38%), faint (20%)
-- **Accent usage**: Crimson red for primary actions, active states, focus rings
-- **Animations**: Minimal, 100-150ms ease transitions, no bouncy effects
-- **Icons**: Bootstrap Icons, consistent size (16px default)
-
-## Performance
-
-- Minimize unnecessary React renders
-- Avoid unnecessary state
-- Memoize only when profiling indicates it is beneficial
-- Keep bundle size and startup time low
-- Debounce file watcher events (200ms) to prevent UI flooding
-- Cache LSP client instances per (language, project root)
-- Limit search results (300 max) and file size (4MB max)
-
-## Go Backend
-
-- Prefer the Go standard library
-- Return descriptive errors with context
-- Avoid blocking the UI thread
-- Long-running work should execute asynchronously when appropriate
-- Use `runtime.EventsEmit` for backend-to-frontend communication
-- Handle graceful shutdown (stop watchers, close LSP clients)
-
-## Frontend
-
-- Prefer TypeScript strict typing
-- Avoid `any` (except where Wails bindings require it)
-- Keep components focused and composable
-- Separate business logic from UI when practical
-- Use custom hooks for shared logic (`useTabManager`, `useFileOps`, `useEditorSettings`)
-- Persist settings and workspace state to `localStorage`
-
-## Adding New Languages
-
-When implementing support for a new language, you MUST update ALL of these:
-
-### Backend (Go)
-
-1. **`toolchain.go`**: Add entry to `toolchains` map in `init()`:
-   ```go
-   "python": {
-       ID: "python",
-       Name: "Python",
-       LSP: &LSPConfig{Command: "pylsp", Args: []string{"--stdio"}},
-       Formatter: &FormatterConfig{Command: "black", Args: []string{"-"}},
-       Markers: []string{"pyproject.toml", "setup.py", "requirements.txt"},
-   }
-   ```
-2. **`lsp_proxy.go`**:
-   - Add case to `lspCommand()` switch
-   - Add case to `lspLangForFile()` switch
-   - Add case to `projectMarkersForLang()` switch
-3. **`types/main.go`**: Add any language-specific types if needed
-
-### Frontend (TypeScript)
-
-1. **`editor/monaco/languages/{lang}.ts`**: Create language module implementing `MonacoLanguage` interface:
-   ```typescript
-   export const python: MonacoLanguage = {
-     id: "python",
-     lsp(editor, _model) {
-       return openLSPDocument(editor);
-     },
-     async formatter(model) {
-       const formatted = await FormatDocument(
-         "python",
-         model.uri.fsPath,
-         model.getValue(),
-       );
-       return [{ range: model.getFullModelRange(), text: formatted }];
-     },
-   };
-   ```
-2. **`editor/monaco/registry.ts`**: Import and register the language:
-   ```typescript
-   import { python } from "./languages/python";
-   export const registry: Record<string, MonacoLanguage> = {
-     go,
-     python,
-   };
-   ```
-3. **`editor/detectLang.ts`**: Add file extension mapping:
-   ```typescript
-   case ".py": return "python";
-   ```
-
-### Settings & Configuration
-
-1. **`frontend/src/types.ts`**: Update `EditorSettings` interface if language needs specific settings
-2. **`frontend/src/hooks/useEditorSettings.ts`**: Add defaults for new settings
-3. **`frontend/src/components/editor/SettingsPanel.tsx`**: Add UI controls for new settings
-4. **`frontend/src/index.css`**: Add any language-specific syntax highlighting overrides if needed
-
-### Testing
-
-1. Verify LSP starts and provides completions/hover/definition
-2. Verify formatter works on save
-3. Verify syntax highlighting is correct
-4. Verify file detection works
-5. Test with missing tools (should prompt for installation)
-
-## UI/UX Updates
-
-When updating the interface:
-
-### Do
-
-- Maintain the dark theme with crimson accent unless explicitly changing theme
-- Keep interactions familiar to VSCode/Sublime/Atom users
-- Use existing component patterns (toggles, sliders, dropdowns)
-- Preserve keyboard shortcuts unless there's a compelling reason
-- Test with both light and dark themes
-- Ensure custom cursors still work
-- Keep the frameless window aesthetic
-
-### Don't
-
-- Introduce mobile-inspired layouts or touch-first patterns
-- Use bright colors outside the accent palette
-- Add animations longer than 200ms
-- Remove familiar IDE features (minimap, line numbers, word wrap)
-- Change the fundamental layout (sidebar left, editor center, status bar bottom)
-- Break existing keyboard shortcuts without migration path
-
-## Before Making Changes
-
-When implementing a feature:
-
-1. **Understand the existing implementation**: Read the relevant files, trace the data flow
-2. **Explain the proposed approach**: Describe what you'll change and why
-3. **Modify the minimum amount of code necessary**: Don't refactor unrelated code
-4. **Update all related systems**: If adding a language, update ALL files listed above
-5. **Test end-to-end**: Verify the feature works from UI to backend and back
-
-## Things to Avoid
-
-- Large-scale refactors without permission
-- Unnecessary abstractions
-- Duplicate logic
-- Dead code
-- Magic numbers
-- Unused dependencies
-- Breaking the plugin system contract
-- Ignoring error handling in async operations
-- Forgetting to update `wails generate module` after adding Go methods
-
-## File Structure Reference
-
-```
-/
-├── main.go                    # Wails app entry point
-├── func.go                    # Core file operations, git, search
-├── lsp_proxy.go               # LSP client implementation
-├── toolchain.go               # Language toolchain registry
-├── types/main.go              # Shared Go types
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx            # React router + providers
-│   │   ├── index.css          # Global styles, theme tokens, cursors
-│   │   ├── types.ts           # Shared TypeScript types
-│   │   ├── pages/Home.tsx     # Main IDE layout
-│   │   ├── components/editor/ # UI components (Header, Sidebar, EditorArea, StatusBar, SettingsPanel)
-│   │   ├── hooks/             # Custom hooks (useTabManager, useFileOps, useEditorSettings)
-│   │   ├── contexts/          # React contexts (ThemeContext)
-│   │   ├── editor/
-│   │   │   ├── monaco/
-│   │   │   │   ├── setup.ts           # Monaco initialization
-│   │   │   │   ├── registry.ts        # Language registry
-│   │   │   │   ├── types.ts           # MonacoLanguage interface
-│   │   │   │   ├── lsp.ts             # LSP integration
-│   │   │   │   └── languages/         # Language implementations (go.ts, etc.)
-│   │   │   ├── detectLang.ts          # File extension → language mapping
-│   │   │   └── keybinding.ts          # Keyboard shortcut definitions
-│   │   └── lib/persistence.ts         # localStorage helpers
-│   └── index.html
-└── types/                     # Shared Go types (imported as merv-code/types)
+```text
+main.go                              Wails app entrypoint
+func.go                              File ops, search, git, watchers
+terminal.go                          Integrated terminal backend
+lsp_bridge.go                        WebSocket <-> stdio LSP bridge
+toolchain.go                         Language toolchains, formatters, linters
+toolchain_manager.go                 Tool availability/install helpers
+workspace.go                         Project-root resolution
+typescript_lsp.go                    TypeScript tsserver fallback path
+frontend/src/pages/Home.tsx          Main IDE shell/state
+frontend/src/pages/Editor.tsx        Monaco editor host + active-tab feature lifecycle
+frontend/src/components/editor/      IDE UI components
+frontend/src/editor/detectLang.ts    File extension -> Monaco language ID
+frontend/src/editor/languageIds.ts   Monaco language -> backend toolchain mapping
+frontend/src/editor/lsp/             LSP client internals
+frontend/src/editor/lint/            Generic linter runner
+frontend/src/editor/monaco/          Monaco setup/registry/language modules/options
+frontend/src/hooks/                  Shared state hooks
+frontend/src/lib/persistence.ts      Workspace localStorage persistence
 ```
 
-## Configuration Persistence
+## UI/UX philosophy
 
-- **Theme**: `localStorage["mervcode:theme"]` ("dark" | "light")
-- **Editor settings**: `localStorage["mervcode:editorSettings"]` (JSON object)
-- **Workspace state**: `localStorage["mervcode.workspace-state"]` (tabs, active file, root path)
+### Design language
 
-When adding new settings:
+- Modern but nostalgic IDE feel.
+- Dark theme default: black canvas with crimson accent (`#DC143C`).
+- Custom cursors where provided.
+- Monaspace font with ligatures enabled by default.
+- Tailwind spacing scale, minimal animation.
 
-1. Add to `EditorSettings` interface in `frontend/src/types.ts`
-2. Add default value in `useEditorSettings.ts`
-3. Add UI control in `SettingsPanel.tsx`
-4. Apply setting in `EditorArea.tsx` via `editor.updateOptions()`
+### Component patterns
 
-Tools i use
+- Left sidebar with tabbed panels: explorer, search, git, settings/dev tools.
+- Center editor area with draggable tabs and context menus.
+- Bottom status bar and integrated terminal.
+- Sectioned settings panel using toggles, sliders, and dropdowns.
+- Centered modal/dialog overlays with dark backdrop.
 
-go
-wails
-typescript
-react
-tailwindcss 4
-motion/react
-do nots:
-never run wails dev it will distrupt the ruunning app
+### Interaction patterns
+
+Follow familiar VS Code/Sublime/Atom conventions:
+
+- `Ctrl+Shift+P`: Command palette
+- `Ctrl+S`: Save
+- `Ctrl+W`: Close tab
+- `Ctrl+``: Toggle terminal
+- `Ctrl+B`: Toggle sidebar
+- `Ctrl+Tab`: Next tab
+- `Ctrl+,`: Settings
+- `Ctrl+Shift+L`: LSP Inspector
+
+## Performance rules
+
+- Keep React components focused and avoid unnecessary state.
+- Avoid expensive work for hidden tabs.
+- LSP/lint features should attach to active editor tabs only; hidden tabs keep models but should not spawn duplicate servers.
+- Cache LSP clients by `(language, resolved project root)`.
+- Debounce file watcher events.
+- Keep search result/file-size limits intact.
+- Do not add dependencies unless they provide significant value.
+
+## LSP and language support rules
+
+### Current model
+
+- `lsp_bridge.go` is the active backend LSP bridge. Do not reference the old `lsp_proxy.go` architecture.
+- One frontend `LSPConnection` is cached per `(server/toolchain language, project root)`.
+- `openLSPDocument()` resolves project root, gets a connection, syncs the model, and registers providers.
+- Providers are global per Monaco language ID but route each request through the owning document connection.
+- Request/notification traffic is logged for debugging.
+
+### TypeScript family
+
+Monaco language IDs:
+
+- `typescript` (`.ts`, `.mts`, `.cts`)
+- `typescriptreact` (`.tsx`)
+- `javascript` (`.js`, `.mjs`, `.cjs`)
+- `javascriptreact` (`.jsx`)
+
+All four route to backend toolchain `typescript`. Keep this distinction: Monaco needs concrete IDs for grammar, backend tools are shared.
+
+### Adding a new language
+
+Update all relevant layers:
+
+1. Backend `toolchain.go`
+   - Add `LanguageToolchain` entry.
+   - Configure LSP, formatter, linter, markers, runtime, installers, manual hints.
+2. Frontend language module
+   - Create `frontend/src/editor/monaco/languages/{lang}.ts`.
+   - Implement `MonacoLanguage` with LSP/formatter/linter hooks as applicable.
+3. Registry
+   - Import/register in `frontend/src/editor/monaco/registry.ts`.
+4. Detection
+   - Map extensions in `frontend/src/editor/detectLang.ts`.
+5. Settings if needed
+   - `frontend/src/types.ts`
+   - `frontend/src/hooks/useEditorSettings.ts`
+   - `frontend/src/editor/settingsSchema.ts`
+   - `frontend/src/editor/monaco/toMonacoOptions.ts`
+6. Docs
+   - Update `docs/LanguageSupport.md` and `docs/FeatureMatrix.md`.
+7. Validate
+   - Tool missing state prompts correctly.
+   - LSP starts and hover/completion/definition work.
+   - Formatter works.
+   - Linter produces markers.
+   - Syntax highlighting/detection works.
+
+## Settings rules
+
+When adding a setting:
+
+1. Add it to `EditorSettings` in `frontend/src/types.ts`.
+2. Add a default in `frontend/src/hooks/useEditorSettings.ts`.
+3. Add UI schema in `frontend/src/editor/settingsSchema.ts`.
+4. Apply it in `frontend/src/editor/monaco/toMonacoOptions.ts`, `Editor.tsx`, `EditorArea.tsx`, or another correct consumer.
+5. Keep settings isolated: editor settings should not unintentionally affect terminal or unrelated app UI.
+6. Ensure saved settings deep-merge with defaults so existing users receive new defaults.
+
+## Terminal rules
+
+- Backend terminal sessions live in `terminal.go` and use ConPTY.
+- Frontend terminal tabs live in `TerminalPanel.tsx` and use xterm.
+- Process exit should emit structured `terminal:exit:<id>` events with exit code.
+- Do not treat post-exit input as a frontend crash; it can race with normal shell/CLI shutdown.
+- Terminal settings are separate from editor settings: font family, font size, cursor blink, scrollback, height, default shell.
+
+## Go backend style
+
+- Prefer Go standard library where practical.
+- Return descriptive errors with context.
+- Avoid blocking the UI thread.
+- Long-running work should run asynchronously where appropriate.
+- Use `runtime.EventsEmit` for backend-to-frontend events.
+- Stop watchers, LSP servers, and terminal sessions gracefully.
+- Use `gofmt`.
+
+## Frontend style
+
+- Prefer strict TypeScript.
+- Avoid `any` unless Wails bindings or third-party APIs force it.
+- Keep components focused and composable.
+- Separate business logic from UI where practical.
+- Use custom hooks for shared state.
+- Persist settings/workspace state through existing localStorage helpers.
+- Do not let hidden editor tabs spawn duplicate language servers.
+
+## Documentation rules
+
+Keep docs current when changing architecture or workflows:
+
+- `README.md` for project overview and quick-start.
+- `docs/ProjectOverview.md` for technical architecture.
+- `docs/Tooling.md` for tools/commands/dependencies.
+- `docs/LanguageSupport.md` for toolchain/language matrix.
+- `docs/LSP-Architecture.md` for protocol internals.
+- `docs/SettingsAndTerminal.md` for settings and terminal behavior.
+- `docs/Troubleshooting.md` for known failure modes.
+- `docs/FeatureMatrix.md` for roadmap/status.
+
+## Things to avoid
+
+- Large-scale refactors without explicit permission.
+- New abstractions with no immediate use.
+- Duplicate toolchain/language mapping logic.
+- Magic paths or hardcoded machine-local values.
+- Ignoring async errors.
+- Breaking keyboard shortcuts.
+- Changing core layout (sidebar left, editor center, status/terminal bottom) without discussion.
+- Removing familiar IDE features without replacement.

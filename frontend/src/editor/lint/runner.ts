@@ -52,10 +52,18 @@ export function registerLinter(
     const filePath = model.uri.fsPath;
     const content = model.getValue();
 
+    console.log(
+      `[lint] request lang=${lang} modelLanguage=${model.getLanguageId()} file=${filePath} bytes=${content.length}`,
+    );
+
     let diagnostics: Awaited<ReturnType<typeof LintDocument>> = [];
     try {
       diagnostics = await LintDocument(lang, filePath, content);
-    } catch {
+      console.log(
+        `[lint] response lang=${lang} file=${filePath} diagnostics=${diagnostics.length}`,
+      );
+    } catch (err) {
+      console.warn(`[lint] failed lang=${lang} file=${filePath}:`, err);
       diagnostics = [];
     }
 

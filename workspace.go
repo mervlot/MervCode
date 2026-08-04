@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,8 +39,11 @@ func (a *App) InvalidateWorkspaceCache() {
 }
 
 func (w *workspaceManager) resolve(lang, filePath, fallbackRoot string) (string, error) {
+	toolchainLang := canonicalToolchainLang(lang)
+	log.Printf("[backend] ResolveProjectRoot(lang=%q toolchain=%q file=%q fallbackRoot=%q)", lang, toolchainLang, filePath, fallbackRoot)
 	filePath, err := absolutePath(filePath)
 	if err != nil {
+		log.Printf("[backend] ResolveProjectRoot(%q) failed: %v", filePath, err)
 		return "", fmt.Errorf("resolve LSP document path: %w", err)
 	}
 	dir := filepath.Dir(filePath)
@@ -66,7 +70,7 @@ func (w *workspaceManager) resolve(lang, filePath, fallbackRoot string) (string,
 		return fallback, nil
 	}
 
-	key := lang + "::" + dir + "::" + fallback
+	key := toolchainLang + "::" + dir + "::" + fallback
 	w.mu.RLock()
 	if cached, ok := w.cache[key]; ok {
 		w.mu.RUnlock()
@@ -82,6 +86,7 @@ func (w *workspaceManager) resolve(lang, filePath, fallbackRoot string) (string,
 	w.mu.Lock()
 	w.cache[key] = root
 	w.mu.Unlock()
+	log.Printf("[backend] ResolveProjectRoot(lang=%q toolchain=%q file=%q) -> root=%q", lang, toolchainLang, filePath, root) 
 	return root, nil
 }
 

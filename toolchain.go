@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -211,6 +212,11 @@ func init() {
 			LSP: &LSPConfig{
 				Command: "typescript-language-server",
 				Args:    []string{"--stdio"},
+				// JS/JSX-only projects often do not install TypeScript locally,
+				// but typescript-language-server still requires tsserver.js.
+				// Provide MervCode's own TypeScript as a fallback so .js/.jsx
+				// hover/completion works even in plain JavaScript workspaces.
+				InitializationOptions: typescriptInitializationOptions(),
 			},
 			// Prettier reads the file's content from stdin and is told the
 			// real path via --stdin-filepath purely so it can pick the right
@@ -340,8 +346,23 @@ func init() {
 	}
 }
 
+// canonicalToolchainLang translates frontend/editor-specific language IDs into
+// the backend toolchain key that actually owns external tools. Monaco must keep
+// TS/JS/React variants separate for grammar/tokenization, but all four share
+// one TypeScript-family toolchain here. Keeping the aliasing in GetToolchain
+// makes every backend entry point (LSP, formatter, linter, tool checks) robust
+// even if a caller accidentally passes a concrete Monaco ID.
+func canonicalToolchainLang(lang string) string {
+	switch lang {
+	case "typescript", "typescriptreact", "javascript", "javascriptreact":
+		return "typescript"
+	default:
+		return lang
+	}
+}
+
 func GetToolchain(lang string) *LanguageToolchain {
-	return toolchains[lang]
+	return toolchains[canonicalToolchainLang(lang)]
 }
 
 // LanguageProfile is the subset of a LanguageToolchain the frontend needs
@@ -359,8 +380,11 @@ type LanguageProfile struct {
 // GetLanguageProfile exposes a language's static LSP configuration to the
 // frontend, fetched once when a connection is first opened.
 func (a *App) GetLanguageProfile(lang string) (*LanguageProfile, error) {
+	toolchainLang := canonicalToolchainLang(lang)
+	log.Printf("[backend] GetLanguageProfile(lang=%q toolchain=%q)", lang, toolchainLang)
 	tc := GetToolchain(lang)
 	if tc == nil {
+		log.Printf("[backend] GetLanguageProfile(%q toolchain=%q) failed: no toolchain configured", lang, toolchainLang)
 		return nil, fmt.Errorf("no toolchain configured for %s", lang)
 	}
 
@@ -368,18 +392,25 @@ func (a *App) GetLanguageProfile(lang string) (*LanguageProfile, error) {
 	if tc.LSP != nil {
 		profile.InitializationOptions = tc.LSP.InitializationOptions
 	}
+	log.Printf("[backend] GetLanguageProfile(%q toolchain=%q) -> markers=%v", lang, toolchainLang, tc.Markers)
 	return profile, nil
 }
 
 func (a *App) FormatDocument(lang, filePath, content string) (string, error) {
+	toolchainLang := canonicalToolchainLang(lang)
+	log.Printf("[backend] FormatDocument(lang=%q toolchain=%q file=%q contentBytes=%d)", lang, toolchainLang, filePath, len(content))
 	tc := GetToolchain(lang)
 	if tc == nil || tc.Formatter == nil {
-		return "", fmt.Errorf("no formatter configured for %s", lang)
+		err := fmt.Errorf("no formatter configured for %s", lang)
+		log.Printf("[backend] FormatDocument(%q) failed: %v", lang, err)
+		return "", err
 	}
 
 	f := tc.Formatter
 	if f.IsAvailable != nil && !f.IsAvailable() {
-		return "", fmt.Errorf("%s is not available", f.Command)
+		err := fmt.Errorf("%s is not available", f.Command)
+		log.Printf("[backend] FormatDocument(%q) failed: %v", lang, err)
+		return "", err
 	}
 
 	var resolvedCmd string
@@ -388,11 +419,13 @@ func (a *App) FormatDocument(lang, filePath, content string) (string, error) {
 	if f.Resolve != nil {
 		resolvedCmd, args, err = f.Resolve(filePath)
 		if err != nil {
+			log.Printf("[backend] FormatDocument(%q) resolve failed: %v", lang, err)
 			return "", fmt.Errorf("resolve %s: %w", f.Command, err)
 		}
 	} else {
 		resolvedCmd, err = findToolBinary(f.Command)
 		if err != nil {
+			log.Printf("[backend] FormatDocument(%q) locate failed: %v", lang, err)
 			return "", fmt.Errorf("locate %s: %w", f.Command, err)
 		}
 		args = f.Args
@@ -400,7 +433,13 @@ func (a *App) FormatDocument(lang, filePath, content string) (string, error) {
 			args = append(append([]string{}, f.Args...), f.DynamicArgs(filePath)...)
 		}
 	}
+	log.Printf("[backend] FormatDocument(%q toolchain=%q) invoking: %q %v", lang, toolchainLang, resolvedCmd, args)
 	cmd := exec.Command(resolvedCmd, args...)
+	// Run from the document's directory so Prettier/formatters resolve the same
+	// package-local config the language server and linter see. This is important
+	// for TS-family files in monorepos where .jsx/.tsx parser/options may come
+	// from the nearest package.json/.prettierrc rather than MervCode's cwd.
+	cmd.Dir = filepath.Dir(filePath)
 
 	if f.Stdin {
 		cmd.Stdin = strings.NewReader(content)
@@ -411,9 +450,12 @@ func (a *App) FormatDocument(lang, filePath, content string) (string, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("format %s: %w\n%s", lang, err, stderr.String())
+		err = fmt.Errorf("format %s: %w\n%s", lang, err, stderr.String())
+		log.Printf("[backend] FormatDocument(%q) failed: %v", lang, err)
+		return "", err
 	}
 
+	logContent(fmt.Sprintf("[backend] FormatDocument(%q) -> ok (%d bytes)", lang, stdout.Len()), stdout.String())
 	return stdout.String(), nil
 }
 
@@ -422,14 +464,20 @@ func (a *App) FormatDocument(lang, filePath, content string) (string, error) {
 // diagnostics. Mirrors FormatDocument's shape and error handling - the only
 // thing linter-specific is LinterConfig.Parse (see eslint.go).
 func (a *App) LintDocument(lang, filePath, content string) ([]LintDiagnostic, error) {
+	toolchainLang := canonicalToolchainLang(lang)
+	log.Printf("[backend] LintDocument(lang=%q toolchain=%q file=%q contentBytes=%d)", lang, toolchainLang, filePath, len(content))
 	tc := GetToolchain(lang)
 	if tc == nil || tc.Linter == nil {
-		return nil, fmt.Errorf("no linter configured for %s", lang)
+		err := fmt.Errorf("no linter configured for %s", lang)
+		log.Printf("[backend] LintDocument(%q) failed: %v", lang, err)
+		return nil, err
 	}
 
 	l := tc.Linter
 	if l.IsAvailable != nil && !l.IsAvailable() {
-		return nil, fmt.Errorf("%s is not available", l.Command)
+		err := fmt.Errorf("%s is not available", l.Command)
+		log.Printf("[backend] LintDocument(%q) failed: %v", lang, err)
+		return nil, err
 	}
 
 	var resolvedCmd string
@@ -438,11 +486,13 @@ func (a *App) LintDocument(lang, filePath, content string) ([]LintDiagnostic, er
 	if l.Resolve != nil {
 		resolvedCmd, args, err = l.Resolve(filePath)
 		if err != nil {
+			log.Printf("[backend] LintDocument(%q) resolve failed: %v", lang, err)
 			return nil, fmt.Errorf("resolve %s: %w", l.Command, err)
 		}
 	} else {
 		resolvedCmd, err = findToolBinary(l.Command)
 		if err != nil {
+			log.Printf("[backend] LintDocument(%q) locate failed: %v", lang, err)
 			return nil, fmt.Errorf("locate %s: %w", l.Command, err)
 		}
 		args = l.Args
@@ -450,6 +500,7 @@ func (a *App) LintDocument(lang, filePath, content string) ([]LintDiagnostic, er
 			args = append(append([]string{}, l.Args...), l.DynamicArgs(filePath)...)
 		}
 	}
+	log.Printf("[backend] LintDocument(%q toolchain=%q) invoking: %q %v", lang, toolchainLang, resolvedCmd, args)
 	cmd := exec.Command(resolvedCmd, args...)
 	// Run from filePath's own directory rather than MervCode's own process
 	// directory - needed for linters that operate on real files/packages
@@ -474,10 +525,15 @@ func (a *App) LintDocument(lang, filePath, content string) ([]LintDiagnostic, er
 	diagnostics, parseErr := l.Parse(stdout.Bytes(), filePath)
 	if parseErr != nil {
 		if runErr != nil {
-			return nil, fmt.Errorf("lint %s: %w\n%s", lang, runErr, stderr.String())
+			err = fmt.Errorf("lint %s: %w\n%s", lang, runErr, stderr.String())
+			log.Printf("[backend] LintDocument(%q) failed: %v", lang, err)
+			return nil, err
 		}
-		return nil, fmt.Errorf("parse %s lint output: %w", lang, parseErr)
+		err = fmt.Errorf("parse %s lint output: %w", lang, parseErr)
+		log.Printf("[backend] LintDocument(%q) parse failed: %v", lang, err)
+		return nil, err
 	}
 
+	log.Printf("[backend] LintDocument(%q) -> %d diagnostics", lang, len(diagnostics))
 	return diagnostics, nil
 }

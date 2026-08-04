@@ -21,6 +21,11 @@ interface TerminalPanelProps {
   visible: boolean;
   /** Current "Default Shell" setting value (e.g. "cmd", "pwsh", ""). */
   defaultShell: string;
+  fontSize: number;
+  fontFamily: string;
+  cursorBlink: boolean;
+  scrollback: number;
+  configuredHeight: number;
 }
 
 interface Shell {
@@ -83,36 +88,66 @@ let termCounter = 0;
 interface TabInfo {
   id: string;
   label: string;
+  exited?: boolean;
+  exitCode?: number;
 }
 
 export default function TerminalPanel({
   visible,
   defaultShell,
+  fontSize,
+  fontFamily,
+  cursorBlink,
+  scrollback,
+  configuredHeight,
 }: TerminalPanelProps) {
   const [tabs, setTabs] = useState<TabInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [height, setHeight] = useState(260);
+  const [height, setHeight] = useState(configuredHeight);
 
   const containers = useRef(new Map<string, HTMLDivElement>());
   const terms = useRef(new Map<string, Terminal>());
   const fits = useRef(new Map<string, FitAddon>());
   const shellById = useRef(new Map<string, string>());
   const cleanupById = useRef(new Map<string, () => void>());
+  const tabsRef = useRef(new Map<string, TabInfo>());
 
   const isDragging = useRef(false);
   const startY = useRef(0);
   const startHeight = useRef(260);
 
+  useEffect(() => {
+    tabsRef.current = new Map(tabs.map((tab) => [tab.id, tab]));
+  }, [tabs]);
+
+  useEffect(() => {
+    if (!isDragging.current) setHeight(configuredHeight);
+  }, [configuredHeight]);
+
+  useEffect(() => {
+    terms.current.forEach((term) => {
+      term.options.fontSize = fontSize;
+      term.options.fontFamily = fontFamily;
+      term.options.cursorBlink = cursorBlink;
+      term.options.scrollback = scrollback;
+    });
+    fits.current.forEach((fit, id) => {
+      fit.fit();
+      const term = terms.current.get(id);
+      if (term) void ResizeTerminal(id, term.cols, term.rows).catch(console.error);
+    });
+  }, [cursorBlink, fontFamily, fontSize, scrollback]);
+
   const initTerminal = useCallback((id: string, el: HTMLDivElement) => {
     const term = new Terminal({
       allowProposedApi: true,
-      cursorBlink: true,
+      cursorBlink,
       cursorStyle: "bar",
       cursorWidth: 2,
-      fontFamily: '"Cascadia Code", "JetBrains Mono", Consolas, monospace',
-      fontSize: 13,
+      fontFamily,
+      fontSize,
       lineHeight: 1.3,
-      scrollback: 5000,
+      scrollback,
       smoothScrollDuration: 100,
       theme: XTERM_THEME,
     });
@@ -131,10 +166,26 @@ export default function TerminalPanel({
     const offOutput = EventsOn(`terminal:output:${id}`, (data: unknown) => {
       term.write(String(data));
     });
-    const offExit = EventsOn(`terminal:exit:${id}`, () => {
-      term.writeln("\r\n\x1b[90m[process exited]\x1b[0m");
-    });
+    const offExit = EventsOn(
+      `terminal:exit:${id}`,
+      (event: { exitCode?: number; ok?: boolean; error?: string } = {}) => {
+        const exitCode = event.exitCode ?? 0;
+        const ok = event.ok ?? exitCode === 0;
+        const detail = event.error ? ` (${event.error})` : "";
+        const color = ok ? "\x1b[90m" : "\x1b[33m";
+        term.writeln(
+          `\r\n${color}[process exited with code ${exitCode}${detail}]\x1b[0m`,
+        );
+        setTabs((prev) =>
+          prev.map((tab) =>
+            tab.id === id ? { ...tab, exited: true, exitCode } : tab,
+          ),
+        );
+      },
+    );
     const inputDisposable = term.onData((data) => {
+      const isExited = tabsRef.current.get(id)?.exited ?? false;
+      if (isExited) return;
       void TerminalInput(id, data).catch(console.error);
     });
 
@@ -158,7 +209,7 @@ export default function TerminalPanel({
           `\r\n\x1b[31mFailed to start terminal: ${String(err)}\x1b[0m`,
         );
       });
-  }, []);
+  }, [cursorBlink, fontFamily, fontSize, scrollback]);
 
   const containerRefFor = useCallback(
     (id: string) => (el: HTMLDivElement | null) => {
@@ -186,6 +237,7 @@ export default function TerminalPanel({
     fits.current.delete(id);
     containers.current.delete(id);
     shellById.current.delete(id);
+    tabsRef.current.delete(id);
 
     setTabs((prev) => {
       const next = prev.filter((t) => t.id !== id);
@@ -203,7 +255,10 @@ export default function TerminalPanel({
     addTab();
     return () => {
       cleanupById.current.forEach((fn) => fn());
-      terms.current.forEach((t) => t.dispose());
+      terms.current.forEach((t, id) => {
+        void StopTerminal(id).catch(console.error);
+        t.dispose();
+      });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -296,7 +351,10 @@ export default function TerminalPanel({
               }`}
             >
               <SquareTerminal size={12} className='shrink-0' />
-              <span className='whitespace-nowrap'>{tab.label}</span>
+              <span className='whitespace-nowrap'>
+                {tab.label}
+                {tab.exited ? ` (${tab.exitCode ?? 0})` : ""}
+              </span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();

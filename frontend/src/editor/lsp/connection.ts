@@ -1,15 +1,17 @@
 import type * as monaco from "monaco-editor";
 import { GetLanguageProfile } from "../../../wailsjs/go/main/App";
-import { ServerCapabilities, EMPTY_CAPABILITIES } from "./capabilities";
+import { EMPTY_CAPABILITIES, ServerCapabilities } from "./capabilities";
 import { toMarker } from "./diagnostics";
 import { lspLogger } from "./logger";
-import type { JSONRPCMessage, JSONValue, PublishDiagnosticsParams, ContentChange, RawServerCapabilities } from "./protocol";
-import {
-  RequestScheduler,
-  priorityForMethod,
-  type RequestPriority,
-} from "./requestScheduler";
-import { WebSocketTransport, type Transport } from "./transport";
+import type {
+  ContentChange,
+  JSONRPCMessage,
+  JSONValue,
+  PublishDiagnosticsParams,
+  RawServerCapabilities,
+} from "./protocol";
+import { priorityForMethod, type RequestPriority, RequestScheduler } from "./requestScheduler";
+import { type Transport, WebSocketTransport } from "./transport";
 import { toFileUri } from "./uri";
 
 // ============================================================================
@@ -21,12 +23,7 @@ import { toFileUri } from "./uri";
 // recovery.
 // ============================================================================
 
-export type ConnectionStatus =
-  | "connecting"
-  | "ready"
-  | "reconnecting"
-  | "disabled"
-  | "closed";
+export type ConnectionStatus = "connecting" | "ready" | "reconnecting" | "disabled" | "closed";
 
 const MAX_RESTARTS = 5;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
@@ -53,7 +50,11 @@ interface OpenDoc {
 }
 
 interface PendingEntry {
-  resolve: (value: JSONValue) => void;
+  complete: (
+    status: "resolved" | "error",
+    value: JSONValue,
+    errorMessage?: string,
+  ) => void;
 }
 
 export interface ConnectionSnapshot {
@@ -77,7 +78,6 @@ export class LSPConnection {
   private diagnosticsListeners = new Set<
     (uri: string, diagnostics: monaco.editor.IMarkerData[]) => void
   >();
-  private providersRegistered = false;
   private restartCount = 0;
   private disposed = false;
   private _status: ConnectionStatus = "connecting";
@@ -133,7 +133,9 @@ export class LSPConnection {
     this.disposed = true;
     this._status = "closed";
     this.transport?.close();
-    this.pending.forEach((entry) => entry.resolve(null));
+    this.pending.forEach((entry) => {
+      entry.complete("error", null, "connection disposed");
+    });
     this.pending.clear();
   }
 
@@ -142,6 +144,7 @@ export class LSPConnection {
   private async connect(): Promise<void> {
     this._status = this.restartCount === 0 ? "connecting" : "reconnecting";
     lspLogger.lifecycle(this.connectionId, this.lang, this.root, this._status);
+    console.log(`[lsp] (${this.lang}) ${this._status} root=${this.root}`);
 
     try {
       const transport = await WebSocketTransport.connect(this.lang, this.root);
@@ -157,6 +160,7 @@ export class LSPConnection {
       this._status = "ready";
       this.restartCount = 0;
       lspLogger.lifecycle(this.connectionId, this.lang, this.root, "ready");
+      console.log(`[lsp] (${this.lang}) ready`);
 
       // Replay documents that were open before a reconnect. Version resets
       // to 1: this is a brand new server process with no memory of the
@@ -175,6 +179,7 @@ export class LSPConnection {
         "error",
         message,
       );
+      console.error(`[lsp] (${this.lang}) connect failed: ${message}`);
       this.handleDisconnect(message);
     }
   }
@@ -183,7 +188,9 @@ export class LSPConnection {
     if (this.disposed || this._status === "disabled") return;
 
     // Unblock anything still waiting on this generation of the connection.
-    this.pending.forEach((entry) => entry.resolve(null));
+    this.pending.forEach((entry) => {
+      entry.complete("error", null, `connection lost: ${reason}`);
+    });
     this.pending.clear();
 
     if (this.restartCount >= MAX_RESTARTS) {
@@ -196,6 +203,7 @@ export class LSPConnection {
         "error",
         `Gave up after ${MAX_RESTARTS} crashes (${reason}). Restart manually from the LSP Inspector.`,
       );
+      console.error(`[lsp] (${this.lang}) disabled after ${MAX_RESTARTS} crashes: ${reason}`);
       return;
     }
 
@@ -209,6 +217,9 @@ export class LSPConnection {
       "crashed",
       "warn",
       `${reason} - reconnecting in ${backoffMs}ms (attempt ${this.restartCount}/${MAX_RESTARTS})`,
+    );
+    console.warn(
+      `[lsp] (${this.lang}) crashed: ${reason} - reconnecting in ${backoffMs}ms (attempt ${this.restartCount}/${MAX_RESTARTS})`,
     );
 
     this.readyPromise = new Promise((resolve) => {
@@ -225,9 +236,7 @@ export class LSPConnection {
     const result = await this.request("initialize", {
       processId: null,
       rootUri,
-      workspaceFolders: rootUri
-        ? [{ uri: rootUri, name: this.root.split(/[\\/]/).pop() }]
-        : null,
+      workspaceFolders: rootUri ? [{ uri: rootUri, name: this.root.split(/[\\/]/).pop() }] : null,
       initializationOptions: profile?.initializationOptions ?? {},
       capabilities: {
         textDocument: {
@@ -251,9 +260,16 @@ export class LSPConnection {
       },
     });
 
-    this._capabilities = new ServerCapabilities(
-      (result as { capabilities?: RawServerCapabilities } | null)?.capabilities,
-    );
+    const capabilities = (result as { capabilities?: RawServerCapabilities } | null)?.capabilities;
+    if (!capabilities) {
+      // An initialize JSON-RPC error means the server rejected the session (for
+      // TypeScript this commonly means no usable tsserver.js). Do not mark the
+      // connection ready or send didOpen with empty capabilities; surface the
+      // failure and let crash/reconnect handling make it visible in logs.
+      throw new Error("LSP initialize failed: server returned no capabilities");
+    }
+
+    this._capabilities = new ServerCapabilities(capabilities);
     this.notify("initialized", {});
   }
 
@@ -288,13 +304,7 @@ export class LSPConnection {
     opts: { priority?: RequestPriority; supersedeKey?: string } = {},
   ): { promise: Promise<JSONValue>; cancel: () => void } {
     const priority = opts.priority ?? priorityForMethod(method);
-    const logKey = lspLogger.beginRequest(
-      this.connectionId,
-      this.lang,
-      method,
-      params,
-      priority,
-    );
+    const logKey = lspLogger.beginRequest(this.connectionId, this.lang, method, params, priority);
 
     if (this._status === "disabled") {
       lspLogger.endRequest(logKey, "error", null, "connection disabled after repeated crashes");
@@ -325,8 +335,8 @@ export class LSPConnection {
         }
         id = this.seq++;
         this.pending.set(id, {
-          resolve: (value) => {
-            finish("resolved", value);
+          complete: (status, value, errorMessage) => {
+            finish(status, value, errorMessage);
             resolveTask(value);
           },
         });
@@ -346,7 +356,11 @@ export class LSPConnection {
         return;
       }
       if (id >= 0) {
-        this.sendRaw({ jsonrpc: "2.0", method: "$/cancelRequest", params: { id } });
+        this.sendRaw({
+          jsonrpc: "2.0",
+          method: "$/cancelRequest",
+          params: { id },
+        });
       }
       finish("cancelled", null, "cancelled");
     };
@@ -369,7 +383,25 @@ export class LSPConnection {
       const entry = this.pending.get(msg.id);
       if (entry) {
         this.pending.delete(msg.id);
-        entry.resolve(msg.error ? null : (msg.result ?? null));
+        if (msg.error) {
+          const message = `${msg.error.code}: ${msg.error.message}`;
+          console.warn(
+            `[lsp] (${this.lang}) request #${msg.id} failed from server: ${message}`,
+          );
+          entry.complete("error", null, message);
+        } else {
+          entry.complete("resolved", msg.result ?? null);
+        }
+      } else {
+        // This usually means the request timed out/cancelled locally and the
+        // server answered later. LSP cancellation responses (-32800) are normal
+        // during hover/completion churn, so keep those at debug level; anything
+        // else remains a warning because it may indicate a protocol mismatch.
+        const log = msg.error?.code === -32800 ? console.debug : console.warn;
+        log(
+          `[lsp] (${this.lang}) received response for unknown/stale request #${msg.id}`,
+          msg,
+        );
       }
       return;
     }
@@ -380,7 +412,9 @@ export class LSPConnection {
     if (msg.method === "textDocument/publishDiagnostics") {
       const params = msg.params as PublishDiagnosticsParams;
       const markers = params.diagnostics.map(toMarker);
-      this.diagnosticsListeners.forEach((fn) => fn(params.uri, markers));
+      this.diagnosticsListeners.forEach((fn) => {
+        fn(params.uri, markers);
+      });
     }
   }
 
@@ -433,17 +467,9 @@ export class LSPConnection {
     this.notify("textDocument/didClose", { textDocument: { uri } });
   }
 
-  onDiagnostics(
-    fn: (uri: string, diagnostics: monaco.editor.IMarkerData[]) => void,
-  ): () => void {
+  onDiagnostics(fn: (uri: string, diagnostics: monaco.editor.IMarkerData[]) => void): () => void {
     this.diagnosticsListeners.add(fn);
     return () => this.diagnosticsListeners.delete(fn);
-  }
-
-  markProvidersRegistered(): boolean {
-    if (this.providersRegistered) return true;
-    this.providersRegistered = true;
-    return false;
   }
 
   // ── feature requests (Monaco-flavored positions in, LSP positions out) ─

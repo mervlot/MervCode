@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -168,9 +169,13 @@ func (a *App) StopLSPBridge() {
 // connect to. The actual language server process is spawned only once
 // that WebSocket connection is made, and is killed when it closes.
 func (a *App) CreateLSPSession(lang, root string) (string, error) {
+	toolchainLang := canonicalToolchainLang(lang)
+	log.Printf("[backend] CreateLSPSession(lang=%q toolchain=%q root=%q)", lang, toolchainLang, root)
 	tc := GetToolchain(lang)
 	if tc == nil || tc.LSP == nil {
-		return "", fmt.Errorf("no LSP server registered for %s", lang)
+		err := fmt.Errorf("no LSP server registered for %s", lang)
+		log.Printf("[backend] CreateLSPSession(%q) failed: %v", lang, err)
+		return "", err
 	}
 
 	// The bridge has no document URI from which it can recover a bad root, so
@@ -178,23 +183,34 @@ func (a *App) CreateLSPSession(lang, root string) (string, error) {
 	// process directory (the previous behaviour for root=".").
 	root, err := absoluteDirectory(root)
 	if err != nil {
+		log.Printf("[backend] CreateLSPSession(%q) invalid root %q: %v", lang, root, err)
 		return "", fmt.Errorf("invalid LSP project root for %s: %w", lang, err)
 	}
 
+	// Surface KPM projects in the session setup path so the bridge-file
+	// generation in handleLSPWebSocket is traceable. ensureKPMJVMProjectModel
+	// does the real work; this is just an observable marker.
+	if _, statErr := os.Stat(filepath.Join(root, "kpm.json")); statErr == nil {
+		log.Printf("[backend] CreateLSPSession(%q toolchain=%q) KPM project detected at %s", lang, toolchainLang, root)
+	}
+
 	if err := a.startLSPBridge(); err != nil {
+		log.Printf("[backend] CreateLSPSession(%q) bridge start failed: %v", lang, err)
 		return "", err
 	}
 
 	token, err := randomToken()
 	if err != nil {
+		log.Printf("[backend] CreateLSPSession(%q) token failed: %v", lang, err)
 		return "", err
 	}
 
 	bridge.mu.Lock()
-	bridge.sessions[token] = &lspSession{lang: lang, root: root}
+	bridge.sessions[token] = &lspSession{lang: toolchainLang, root: root}
 	addr := bridge.listener.Addr().String()
 	bridge.mu.Unlock()
 
+	log.Printf("[backend] CreateLSPSession(%q toolchain=%q root=%q) -> ws://%s/lsp?token=%s", lang, toolchainLang, root, addr, token)
 	return fmt.Sprintf("ws://%s/lsp?token=%s", addr, token), nil
 }
 
@@ -226,6 +242,18 @@ func (a *App) handleLSPWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// For KPM-managed JVM projects (java/kotlin), make sure the standard
+	// project model that the language servers actually understand exists
+	// before the server imports it. ensureKPMJVMProjectModel is a no-op for
+	// non-KPM roots and never overwrites user-owned Maven/Gradle/Eclipse
+	// files, so it is safe to call unconditionally here for the JVM langs.
+	switch sess.lang {
+	case "java", "kotlin":
+		if err := ensureKPMJVMProjectModel(sess.root); err != nil {
+			log.Printf("[LSP bridge] KPM project model generation for %s at %s failed (continuing): %v", sess.lang, sess.root, err)
+		}
+	}
+
 	var resolvedCmd string
 	var resolvedArgs []string
 	var resolvedEnv []string
@@ -255,6 +283,7 @@ func (a *App) handleLSPWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 	conn.SetReadLimit(lspMaxMessageSize)
+	log.Printf("[LSP bridge] WebSocket connected: lang=%s root=%s token=%s", sess.lang, sess.root, token)
 
 	procCtx, cancel := context.WithCancel(bridge.ctx)
 	defer cancel()
@@ -372,6 +401,7 @@ func wsToStdio(conn *websocket.Conn, dst io.Writer) error {
 		if !json.Valid(msg) {
 			return errors.New("invalid JSON-RPC message from client")
 		}
+		logJSONRPC("client -> server", msg)
 
 		header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(msg))
 		if _, err := io.WriteString(dst, header); err != nil {
@@ -394,10 +424,100 @@ func stdioToWS(src io.Reader, conn *websocket.Conn) error {
 		if err != nil {
 			return err
 		}
+		logJSONRPC("server -> client", msg)
 		if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
 			return err
 		}
 	}
+}
+
+// logJSONRPC logs one raw JSON-RPC message crossing the bridge, tagging it
+// with the direction it flows. Document payloads (didOpen/didChange text,
+// didChange contentChanges) are summarized rather than echoed in full so
+// keystrokes on large files can't flood the console, while everything else
+// - initialization, hover/completion/definition, responses, diagnostics -
+// is logged in full.
+func logJSONRPC(direction string, msg []byte) {
+	var parsed map[string]any
+	if err := json.Unmarshal(msg, &parsed); err != nil {
+		log.Printf("[LSP traffic] %s (unparseable, %d bytes): %q", direction, len(msg), truncateBytes(string(msg), 400))
+		return
+	}
+
+	id, _ := parsed["id"]
+	method, _ := parsed["method"].(string)
+	payloadLabel := "params"
+	payload := parsed["params"]
+	if method == "" {
+		method = "(response)"
+		if errPayload, ok := parsed["error"]; ok {
+			payloadLabel = "error"
+			payload = errPayload
+		} else {
+			payloadLabel = "result"
+			payload = parsed["result"]
+		}
+	}
+	log.Printf("[LSP traffic] %s id=%v method=%s %s=%s", direction, id, method, payloadLabel, summarizeJSONRPCPayload(payload))
+}
+
+// summarizeJSONRPCPayload replaces document `text` fields (didOpen/didChange
+// contentChanges) with truncated previews so full buffers never hit the log.
+// It is used for request params, notification params, response results, and
+// response errors, so every transaction crossing the WebSocket/stdio bridge has
+// a useful one-line trace.
+func summarizeJSONRPCPayload(v any) string {
+	if v == nil {
+		return "<nil>"
+	}
+	b, err := json.Marshal(summarizeJSONRPCValue(v))
+	if err != nil {
+		return fmt.Sprintf("<unmarshalable: %v>", err)
+	}
+	// Keep a single log line to a sane length; truncated if a server
+	// sends something enormous (huge diagnostics pushes, etc.).
+	return truncateBytes(string(b), 2000)
+}
+
+func summarizeJSONRPCValue(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, child := range val {
+			if k == "text" {
+				if s, ok := child.(string); ok {
+					out[k] = summarizeText(s)
+					continue
+				}
+			}
+			out[k] = summarizeJSONRPCValue(child)
+		}
+		return out
+	case []any:
+		out := make([]any, 0, len(val))
+		for _, child := range val {
+			out = append(out, summarizeJSONRPCValue(child))
+		}
+		return out
+	default:
+		return val
+	}
+}
+
+const maxLoggedText = 300
+
+func summarizeText(s string) string {
+	if len(s) <= maxLoggedText {
+		return s
+	}
+	return s[:maxLoggedText] + fmt.Sprintf("...[%d more bytes]", len(s)-maxLoggedText)
+}
+
+func truncateBytes(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + fmt.Sprintf("...[%d more bytes]", len(s)-max)
 }
 
 func readLSPFrame(reader *bufio.Reader) ([]byte, error) {

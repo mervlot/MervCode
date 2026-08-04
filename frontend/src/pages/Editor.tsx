@@ -1,15 +1,19 @@
-import { useEffect, useRef } from "react";
 import * as monaco from "monaco-editor";
-
-import { setupMonaco } from "../editor/monaco/setup";
-import { applyLanguageFeatures } from "../editor/monaco/apply";
-import {
-  toMonacoOptions,
-  toModelOptions,
-} from "../editor/monaco/toMonacoOptions";
-import { getCustomActions } from "../editor/keybinding";
+import { useEffect, useRef } from "react";
 import { useTheme } from "../contexts/ThemeContext";
+import { getCustomActions } from "../editor/keybinding";
+import { applyLanguageFeatures } from "../editor/monaco/apply";
+import { setupMonaco } from "../editor/monaco/setup";
+import { toModelOptions, toMonacoOptions } from "../editor/monaco/toMonacoOptions";
+import { summarizeText } from "../lib/backendLog";
 import type { EditorSettings } from "../types";
+
+// Logs Monaco's view of a file without leaking a full buffer. These are the
+// tags used everywhere in the dev console: `[monaco]` = what Monaco itself
+// sees, `[backend →/←]` = calls that reach Go (lib/backendLog.ts).
+function mlog(message: string, ...args: unknown[]): void {
+  console.log(`[monaco] ${message}`, ...args);
+}
 
 interface EditorProps {
   doc?: string;
@@ -43,10 +47,13 @@ export default function Editor({
   const onChangeRef = useRef(onChange);
   const settingsRef = useRef(settings);
   const rootPathRef = useRef(rootPath);
-  // Tracks which rootPath value the currently-active LSP connection was
-  // opened with, so the effect below can tell "rootPath prop changed" from
-  // "rootPath prop re-rendered with the same value".
+  // Tracks which feature wiring is active for this editor. LSP/lint providers
+  // are intentionally attached only while a tab is active; hidden tabs keep
+  // their Monaco model but do not spawn/hold language-server documents. This
+  // prevents Java/Kotlin projects from starting several JDTLS/Kotlin LSP
+  // processes for the same root when restored tabs render in the background.
   const appliedRootPathRef = useRef<string | undefined>(undefined);
+  const appliedLangRef = useRef<string | null>(null);
   const lspCleanupRef = useRef<(() => void) | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { theme } = useTheme();
@@ -63,19 +70,28 @@ export default function Editor({
     settingsRef.current = settings;
   }, [settings]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: one editor instance per path; langKey/doc/theme/rootPath apply through their own effects below
   useEffect(() => {
     if (!containerRef.current) return;
 
     try {
+      mlog(
+        `mount: path=${path} langKey=${langKey} docBytes=${doc.length} rootPath=${
+          rootPathRef.current ?? "(none)"
+        } active=${active}`,
+      );
       setupMonaco();
 
       const uri = monaco.Uri.file(path);
 
-      const model =
-        monaco.editor.getModel(uri) ??
-        monaco.editor.createModel(doc, langKey, uri);
+      const existingModel = monaco.editor.getModel(uri);
+      const model = existingModel ?? monaco.editor.createModel(doc, langKey, uri);
 
       modelRef.current = model;
+
+      mlog(
+        `model ${existingModel ? "reused" : "created"} for ${uri.toString()}: languageId=${model.getLanguageId()} valueBytes=${model.getValue().length}`,
+      );
 
       const editor = monaco.editor.create(containerRef.current, {
         model,
@@ -85,6 +101,7 @@ export default function Editor({
       });
 
       editorRef.current = editor;
+      mlog(`editor instance created for ${path}`);
 
       const customActions = getCustomActions({
         onSave: async (content) => {
@@ -94,6 +111,7 @@ export default function Editor({
             content = model.getValue();
           }
           if (onSaveRef.current) {
+            mlog(`save requested for ${path}, bytes=${content.length}`);
             await onSaveRef.current(content);
           }
         },
@@ -117,12 +135,6 @@ export default function Editor({
         editor.addAction(descriptor);
       });
 
-      lspCleanupRef.current?.();
-      appliedRootPathRef.current = rootPathRef.current;
-      lspCleanupRef.current =
-        applyLanguageFeatures(langKey, editor, model, rootPathRef.current) ??
-        null;
-
       editor.onDidChangeCursorPosition((e) => {
         onCursorChange?.({
           line: e.position.lineNumber,
@@ -130,45 +142,70 @@ export default function Editor({
         });
       });
 
-      const changeSub = model.onDidChangeContent(() => {
+      const changeSub = model.onDidChangeContent((event) => {
+        mlog(
+          `content change on ${path}: ${event.changes.length} edit(s)`,
+          event.changes.map((c) => ({
+            range: `${c.range.startLineNumber}:${c.range.startColumn}->${c.range.endLineNumber}:${c.range.endColumn}`,
+            text: summarizeText(c.text),
+          })),
+          `totalBytes=${model.getValue().length}`,
+        );
         onChangeRef.current?.(model.getValue());
 
         const s = settingsRef.current;
-        if (s?.autoSave) {
+        if (s?.autoSave === "afterDelay") {
           if (autoSaveTimerRef.current) {
             clearTimeout(autoSaveTimerRef.current);
           }
           autoSaveTimerRef.current = setTimeout(async () => {
+            mlog(`auto-save firing for ${path}`);
             if (s?.formatOnSave) {
               await editor.getAction("editor.action.formatDocument")?.run();
             }
             onSaveRef.current?.(model.getValue());
-          }, 1000);
+          }, s.autoSaveDelay);
         }
       });
 
-      editor.addCommand(
-        monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
-        () => {
-          editor.getAction("editor.action.formatDocument")?.run();
-        },
-      );
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyF, () => {
+        editor.getAction("editor.action.formatDocument")?.run();
+      });
+
+      const blurSub = editor.onDidBlurEditorWidget(() => {
+        const s = settingsRef.current;
+        if (s?.autoSave !== "onFocusChange") return;
+        void onSaveRef.current?.(model.getValue());
+      });
+
+      const windowBlurHandler = () => {
+        const s = settingsRef.current;
+        if (s?.autoSave !== "onWindowChange") return;
+        void onSaveRef.current?.(model.getValue());
+      };
+      window.addEventListener("blur", windowBlurHandler);
 
       onReady?.(editor);
 
       return () => {
+        mlog(`unmount: disposing editor/model for ${path}`);
         lspCleanupRef.current?.();
         lspCleanupRef.current = null;
+        appliedLangRef.current = null;
+        appliedRootPathRef.current = undefined;
         if (autoSaveTimerRef.current) {
           clearTimeout(autoSaveTimerRef.current);
         }
         changeSub.dispose();
+        blurSub.dispose();
+        window.removeEventListener("blur", windowBlurHandler);
         editor.dispose();
         const existingModel = monaco.editor.getModel(uri);
         if (existingModel) existingModel.dispose();
       };
     } catch (error) {
       console.error("[MervCode] Failed to initialize Monaco editor:", error);
+      console.error("[monaco] init failed for", { path, langKey });
       return undefined;
     }
   }, [path]);
@@ -176,47 +213,53 @@ export default function Editor({
   useEffect(() => {
     rootPathRef.current = rootPath;
 
-    // The workspace root often isn't known yet the moment a restored tab's
-    // editor mounts (ExplorerPanel resolves it asynchronously), so the
-    // mount effect above can end up opening the LSP connection with an
-    // undefined/stale rootPath. Once the real root arrives, re-wire the
-    // connection so the language server is spawned/queried against the
-    // actual opened project instead of being stuck on whatever fallback it
-    // started with.
-    if (appliedRootPathRef.current === rootPath) return;
-
     const model = modelRef.current;
     const editor = editorRef.current;
     if (!model || !editor) return;
 
-    appliedRootPathRef.current = rootPath;
+    if (model.getLanguageId() !== langKey) {
+      mlog(`language change: ${model.getLanguageId()} -> ${langKey} for ${path}`);
+      monaco.editor.setModelLanguage(model, langKey);
+      mlog(`monaco now sees languageId=${model.getLanguageId()} for ${path}`);
+    }
+
+    if (!active) {
+      if (lspCleanupRef.current) {
+        mlog(`language features suspended for inactive tab: ${path}`);
+        lspCleanupRef.current();
+        lspCleanupRef.current = null;
+      }
+      appliedRootPathRef.current = undefined;
+      appliedLangRef.current = null;
+      return;
+    }
+
+    const sameRoot = appliedRootPathRef.current === rootPath;
+    const sameLang = appliedLangRef.current === langKey;
+    if (lspCleanupRef.current && sameRoot && sameLang) return;
+
     lspCleanupRef.current?.();
-    lspCleanupRef.current =
-      applyLanguageFeatures(langKey, editor, model, rootPath) ?? null;
-  }, [rootPath]);
+    appliedRootPathRef.current = rootPath;
+    appliedLangRef.current = langKey;
+    lspCleanupRef.current = applyLanguageFeatures(langKey, editor, model, rootPath) ?? null;
+    mlog(
+      `language features active: lang=${langKey} root=${rootPath ?? "(auto)"} path=${path}`,
+    );
+  }, [active, langKey, rootPath, path]);
 
   useEffect(() => {
     const model = modelRef.current;
     if (!model) return;
 
     if (model.getValue() !== doc) {
+      mlog(
+        `syncing model content for ${path} (model=${model.getValue().length}B, doc prop=${doc.length}B)`,
+      );
       model.setValue(doc);
     }
-  }, [doc]);
+  }, [doc, path]);
 
-  useEffect(() => {
-    const model = modelRef.current;
-    const editor = editorRef.current;
-    if (!model || !editor) return;
 
-    monaco.editor.setModelLanguage(model, langKey);
-
-    appliedRootPathRef.current = rootPathRef.current;
-    lspCleanupRef.current?.();
-    lspCleanupRef.current =
-      applyLanguageFeatures(langKey, editor, model, rootPathRef.current) ??
-      null;
-  }, [langKey]);
 
   useEffect(() => {
     monaco.editor.setTheme(theme === "light" ? "vs" : "vs-dark");

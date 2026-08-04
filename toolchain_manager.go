@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -94,8 +95,11 @@ type ToolStatus struct {
 }
 
 func (a *App) CheckLanguageTools(lang string) (*ToolStatus, error) {
+	toolchainLang := canonicalToolchainLang(lang)
+	log.Printf("[backend] CheckLanguageTools(lang=%q toolchain=%q)", lang, toolchainLang)
 	tc := GetToolchain(lang)
 	if tc == nil {
+		log.Printf("[backend] CheckLanguageTools(%q toolchain=%q) failed: no toolchain configured", lang, toolchainLang)
 		return nil, fmt.Errorf("no toolchain configured for %s", lang)
 	}
 
@@ -109,6 +113,7 @@ func (a *App) CheckLanguageTools(lang string) (*ToolStatus, error) {
 		if _, err := findToolBinary(tc.RuntimeBinary); err != nil {
 			status.LanguageInstalled = false
 			status.InstallCommand = installCommandFor(tc.RuntimeBinary)
+			log.Printf("[backend] CheckLanguageTools(%q toolchain=%q) -> runtime missing: %s", lang, toolchainLang, tc.RuntimeBinary)
 			return status, nil
 		}
 		status.LanguageInstalled = true
@@ -133,12 +138,16 @@ func (a *App) CheckLanguageTools(lang string) (*ToolStatus, error) {
 		status.ToolsInstalled = true
 	}
 
+	log.Printf("[backend] CheckLanguageTools(%q toolchain=%q) -> runtimeInstalled=%t toolsInstalled=%t missing=%v", lang, toolchainLang, status.LanguageInstalled, status.ToolsInstalled, status.MissingTools)
 	return status, nil
 }
 
 func (a *App) InstallTools(lang string) error {
+	toolchainLang := canonicalToolchainLang(lang)
+	log.Printf("[backend] InstallTools(lang=%q toolchain=%q)", lang, toolchainLang)
 	tc := GetToolchain(lang)
 	if tc == nil {
+		log.Printf("[backend] InstallTools(%q toolchain=%q) failed: no toolchain configured", lang, toolchainLang)
 		return fmt.Errorf("no toolchain configured for %s", lang)
 	}
 

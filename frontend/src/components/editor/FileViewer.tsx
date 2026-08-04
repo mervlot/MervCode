@@ -4,13 +4,15 @@ import ImageViewer from "../../pages/ImageViewer";
 import SpreadSheetViewer from "../../pages/SpreadSheetViewer";
 import ErrorBoundary from "./ErrorBoundary";
 import SettingsPanel from "./SettingsPanel";
+import { detectLang } from "../../editor/detectLang";
 import type { EditorSettings, FileTab } from "../../types";
 
 interface FileViewerProps {
   tab: FileTab;
-  language: string;
+  language?: string;
   settings: EditorSettings;
   onSettingsChange: (patch: Partial<EditorSettings>) => void;
+  onSettingsReset: () => void;
   onCursorChange: (pos: { line: number; column: number }) => void;
   onEditorReady: (
     path: string,
@@ -27,6 +29,7 @@ export default function FileViewer({
   language,
   settings,
   onSettingsChange,
+  onSettingsReset,
   onCursorChange,
   onEditorReady,
   onChange,
@@ -34,12 +37,20 @@ export default function FileViewer({
   rootPath,
   active,
 }: FileViewerProps) {
+  // Language identity belongs to the file being rendered, not the currently
+  // active tab. EditorArea renders hidden tabs too; using the active tab's
+  // language for every FileViewer was causing hidden .jsx/.tsx/.js/.ts models
+  // to be re-labeled whenever the user switched tabs, which broke Monaco's
+  // grammar, didOpen languageId, formatter routing, and lint marker ownership.
+  const fileLanguage = language ?? detectLang(tab.name);
+
   return (
     <ErrorBoundary label={tab.name} resetKey={tab.path}>
       {tab.category === "settings" ? (
         <SettingsPanel
           settings={settings}
           onSettingsChange={onSettingsChange}
+          onSettingsReset={onSettingsReset}
         />
       ) : tab.category === "image" ? (
         <ImageViewer
@@ -77,7 +88,7 @@ export default function FileViewer({
       ) : (
         <Editor
           doc={tab.content ?? ""}
-          langKey={language}
+          langKey={fileLanguage}
           path={tab.path}
           settings={settings}
           onCursorChange={onCursorChange}

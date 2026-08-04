@@ -83,6 +83,7 @@ export function toMonacoOptions(
     lineNumbersMinChars: settings.lineNumbersMinChars,
     renderLineHighlight: settings.renderLineHighlight,
     renderLineHighlightOnlyWhenFocus: settings.renderLineHighlightOnlyWhenFocus,
+    roundedSelection: settings.roundedSelection,
 
     // Minimap — settings.minimap already matches Monaco's
     // IEditorMinimapOptions shape ({enabled, maxColumn, ...}), so pass it
@@ -95,6 +96,7 @@ export function toMonacoOptions(
     // Overview ruler
     overviewRulerLanes: settings.overviewRulerLanes,
     overviewRulerBorder: settings.overviewRulerBorder,
+    hideCursorInOverviewRuler: settings.hideCursorInOverviewRuler,
 
     // Glyph margin & folding
     glyphMargin: settings.glyphMargin,
@@ -170,6 +172,7 @@ export function toMonacoOptions(
     selectionHighlight: settings.selectionHighlight,
     occurrencesHighlight: settings.occurrencesHighlight,
     codeLens: settings.codeLens,
+    colorDecorators: settings.colorDecorators,
     codeLensFontFamily: settings.codeLensFontFamily,
     codeLensFontSize: settings.codeLensFontSize,
     parameterHints: settings.parameterHints,

@@ -3,7 +3,7 @@ import type { EditorSettings } from "../types";
 
 const STORAGE_KEY = "mervcode:editorSettings";
 
-const defaults: EditorSettings = {
+export const defaultEditorSettings: EditorSettings = {
   fontSize: 14,
   fontFamily: "'Monaspace Argon', 'Fira Code', 'Cascadia Code', monospace",
   fontWeight: "normal",
@@ -129,6 +129,11 @@ const defaults: EditorSettings = {
   padding: { top: 0, bottom: 0 },
 
   defaultShell: "",
+  terminalFontSize: 13,
+  terminalFontFamily: '"Cascadia Code", "JetBrains Mono", Consolas, monospace',
+  terminalCursorBlink: true,
+  terminalScrollback: 5000,
+  terminalHeight: 260,
 
   maxTokenizationLineLength: 20000,
   largeFileOptimizations: true,
@@ -136,15 +141,38 @@ const defaults: EditorSettings = {
   useTabStops: true,
   wordBasedSuggestions: "currentDocument",
   semanticTokens: true,
+  roundedSelection: true,
+  hideCursorInOverviewRuler: false,
+  colorDecorators: true,
 };
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function mergeSettings<T extends object>(defaults: T, saved: unknown): T {
+  if (!isPlainObject(saved)) return { ...defaults };
+
+  const defaultRecord = defaults as Record<string, unknown>;
+  const merged: Record<string, unknown> = { ...defaultRecord };
+  for (const [key, value] of Object.entries(saved)) {
+    const defaultValue = defaultRecord[key];
+    merged[key] = isPlainObject(defaultValue) && isPlainObject(value)
+      ? mergeSettings(defaultValue, value)
+      : value;
+  }
+  return merged as T;
+}
 
 function load(): EditorSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...defaults };
-    return { ...defaults, ...JSON.parse(raw) };
+    if (!raw) return { ...defaultEditorSettings };
+    // Deep merge so new nested settings (minimap/scrollbar/terminal/etc.) get
+    // defaults without clobbering the user's existing saved preferences.
+    return mergeSettings(defaultEditorSettings, JSON.parse(raw));
   } catch {
-    return { ...defaults };
+    return { ...defaultEditorSettings };
   }
 }
 
@@ -166,5 +194,9 @@ export function useEditorSettings() {
     [],
   );
 
-  return { settings, updateSettings };
+  const resetSettings = useCallback(() => {
+    setSettings({ ...defaultEditorSettings });
+  }, []);
+
+  return { settings, updateSettings, resetSettings };
 }

@@ -142,6 +142,23 @@ const INHERIT_FONT_OPTIONS: SelectOption[] = [
   ...FONT_OPTIONS,
 ];
 
+const TERMINAL_FONT_OPTIONS: SelectOption[] = [
+  {
+    value: '"Cascadia Code", "JetBrains Mono", Consolas, monospace',
+    label: "Cascadia Code / JetBrains Mono",
+  },
+  {
+    value: '"JetBrains Mono", "Cascadia Code", Consolas, monospace',
+    label: "JetBrains Mono",
+  },
+  {
+    value: '"Monaspace Argon", "Cascadia Code", Consolas, monospace',
+    label: "Monaspace Argon",
+  },
+  { value: "Consolas, monospace", label: "Consolas" },
+  { value: "monospace", label: "System Monospace" },
+];
+
 export const SETTINGS_SECTIONS: SettingSection[] = [
   {
     id: "editor",
@@ -347,6 +364,13 @@ export const SETTINGS_SECTIONS: SettingSection[] = [
             (s) => s.renderLineHighlightOnlyWhenFocus,
             (_s, v) => ({ renderLineHighlightOnlyWhenFocus: v }),
           ),
+          toggle(
+            "roundedSelection",
+            "Rounded Selection",
+            "Use rounded corners for selected text ranges.",
+            (s) => s.roundedSelection,
+            (_s, v) => ({ roundedSelection: v }),
+          ),
         ],
       },
     ],
@@ -511,6 +535,13 @@ export const SETTINGS_SECTIONS: SettingSection[] = [
             "Draw a border around the overview ruler.",
             (s) => s.overviewRulerBorder,
             (_s, v) => ({ overviewRulerBorder: v }),
+          ),
+          toggle(
+            "hideCursorInOverviewRuler",
+            "Hide Cursor In Overview Ruler",
+            "Do not show the current cursor position marker in the overview ruler.",
+            (s) => s.hideCursorInOverviewRuler,
+            (_s, v) => ({ hideCursorInOverviewRuler: v }),
           ),
         ],
       },
@@ -1227,6 +1258,14 @@ export const SETTINGS_SECTIONS: SettingSection[] = [
             (s) => s.codeLens,
             (_s, v) => ({ codeLens: v }),
           ),
+          toggle(
+            "colorDecorators",
+            "Color Decorators",
+            "Show inline color swatches for CSS color values.",
+            (s) => s.colorDecorators,
+            (_s, v) => ({ colorDecorators: v }),
+            "css swatch decorators",
+          ),
           select(
             "codeLensFontFamily",
             "Code Lens Font Family",
@@ -1475,6 +1514,51 @@ export const SETTINGS_SECTIONS: SettingSection[] = [
             ],
             (s) => s.defaultShell,
             (_s, v) => ({ defaultShell: v }),
+          ),
+          select(
+            "terminalFontFamily",
+            "Terminal Font Family",
+            "Font family used in the integrated terminal. Kept separate from the editor font.",
+            TERMINAL_FONT_OPTIONS,
+            (s) => s.terminalFontFamily,
+            (_s, v) => ({ terminalFontFamily: v }),
+          ),
+          slider(
+            "terminalFontSize",
+            "Terminal Font Size",
+            "Font size used by new and existing terminal tabs.",
+            9,
+            28,
+            (s) => s.terminalFontSize,
+            (_s, v) => ({ terminalFontSize: v }),
+            { suffix: "px" },
+          ),
+          toggle(
+            "terminalCursorBlink",
+            "Terminal Cursor Blink",
+            "Blink the integrated terminal cursor.",
+            (s) => s.terminalCursorBlink,
+            (_s, v) => ({ terminalCursorBlink: v }),
+          ),
+          slider(
+            "terminalScrollback",
+            "Terminal Scrollback",
+            "Number of lines retained in each terminal tab's scrollback buffer.",
+            1000,
+            20000,
+            (s) => s.terminalScrollback,
+            (_s, v) => ({ terminalScrollback: v }),
+            { step: 1000, suffix: " lines" },
+          ),
+          slider(
+            "terminalHeight",
+            "Terminal Panel Height",
+            "Default height of the integrated terminal panel.",
+            120,
+            800,
+            (s) => s.terminalHeight,
+            (_s, v) => ({ terminalHeight: v }),
+            { step: 10, suffix: "px" },
           ),
         ],
       },

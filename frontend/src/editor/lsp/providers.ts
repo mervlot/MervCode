@@ -4,10 +4,21 @@ import type { LSPLocation, LSPRange } from "./protocol";
 
 // ============================================================================
 // Registers Monaco's hover/completion/definition/reference providers for a
-// language, backed by an LSPConnection. Providers are registered once per
-// language (shared across every open file of that language, matching
-// Monaco's provider APIs being global per languageId) and gated on the
-// server's negotiated capabilities so an unsupported feature never fires a doomed request.
+// language. Providers are registered once per Monaco languageId, ever -
+// Monaco's provider APIs are global per languageId, so registering more than
+// once would just stack duplicate providers.
+//
+// TypeScript/TSX/JavaScript/JSX all share connections keyed by (server,
+// root) - multiple different (root) connections can exist for the same
+// languageId at once (different projects/workspaces open in the same
+// session), and which one a given open file belongs to can change over
+// time. So instead of a provider closing over one fixed LSPConnection
+// captured at registration time, every provider call looks up the RIGHT
+// connection for the specific model it's being asked about, via a
+// per-document-URI registry that openLSPDocument (index.ts) keeps current.
+// This also means restarting/reconnecting a session's connection object
+// (crash recovery) doesn't leave providers pointing at a stale, dead one -
+// they just always ask "what does this URI belong to right now".
 //
 // Cancellation: Monaco hands every provider a CancellationToken. It's wired
 // straight to the underlying request's cancel() so moving the cursor away
@@ -15,14 +26,33 @@ import type { LSPLocation, LSPRange } from "./protocol";
 // and drops the response instead of letting stale results race the UI.
 // ============================================================================
 
-export function registerProviders(
-  languageId: string,
+const connectionsByUri = new Map<string, LSPConnection>();
+
+/** Associates uri with the connection that currently owns it. Called once
+ * openLSPDocument has resolved which project (and therefore which
+ * connection) the file belongs to. */
+export function setDocumentConnection(
+  uri: string,
   connection: LSPConnection,
 ): void {
-  if (connection.markProvidersRegistered()) return;
+  connectionsByUri.set(uri, connection);
+}
+
+/** Removes uri's connection association (file closed). */
+export function clearDocumentConnection(uri: string): void {
+  connectionsByUri.delete(uri);
+}
+
+const registeredLanguages = new Set<string>();
+
+export function registerProviders(languageId: string): void {
+  if (registeredLanguages.has(languageId)) return;
+  registeredLanguages.add(languageId);
 
   monaco.languages.registerHoverProvider(languageId, {
     async provideHover(model, position, token) {
+      const connection = connectionsByUri.get(model.uri.toString());
+      if (!connection) return null;
       await connection.waitUntilReady();
       if (!connection.capabilities.hover) return null;
 
@@ -51,6 +81,8 @@ export function registerProviders(
   monaco.languages.registerCompletionItemProvider(languageId, {
     triggerCharacters: [".", '"', "'", "/", "@", "<", ":"],
     async provideCompletionItems(model, position, _context, token) {
+      const connection = connectionsByUri.get(model.uri.toString());
+      if (!connection) return { suggestions: [] };
       await connection.waitUntilReady();
       if (!connection.capabilities.completion) return { suggestions: [] };
 
@@ -83,6 +115,8 @@ export function registerProviders(
 
   monaco.languages.registerDefinitionProvider(languageId, {
     async provideDefinition(model, position, token) {
+      const connection = connectionsByUri.get(model.uri.toString());
+      if (!connection) return null;
       await connection.waitUntilReady();
       if (!connection.capabilities.definition) return null;
 
@@ -99,6 +133,8 @@ export function registerProviders(
 
   monaco.languages.registerReferenceProvider(languageId, {
     async provideReferences(model, position, _context, token) {
+      const connection = connectionsByUri.get(model.uri.toString());
+      if (!connection) return null;
       await connection.waitUntilReady();
       if (!connection.capabilities.references) return null;
 

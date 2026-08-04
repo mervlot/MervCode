@@ -62,7 +62,7 @@ export default function Home() {
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
-  const { settings, updateSettings } = useEditorSettings();
+  const { settings, updateSettings, resetSettings } = useEditorSettings();
 
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
   const [tabs, setTabs] = useState<FileTab[]>([]);
@@ -355,6 +355,7 @@ export default function Home() {
           language={language}
           settings={settings}
           onSettingsChange={updateSettings}
+          onSettingsReset={resetSettings}
           rootPath={workspaceRoot?.path}
           cursor={cursor}
           setCursor={setCursor}

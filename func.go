@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -20,6 +21,22 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// maxLogContent caps how much of a document's text is echoed into the
+// console log; anything beyond it is summarized as a byte count so huge
+// files can't flood the log.
+const maxLogContent = 4000
+
+// logContent renders a document (or any text payload) for the console log,
+// truncating the middle of very long documents while keeping the head so
+// the actual content Monaco sent is visible.
+func logContent(label, content string) {
+	if len(content) <= maxLogContent {
+		log.Printf("%s (%d bytes): %q", label, len(content), content)
+		return
+	}
+	log.Printf("%s (%d bytes, showing first %d): %q...", label, len(content), maxLogContent, content[:maxLogContent])
+}
 
 type App struct {
 	ctx           context.Context
@@ -121,15 +138,24 @@ func (a *App) StartWatcher(rootPath string) error {
 }
 
 func (a *App) FolderDialog() (string, error) {
+	log.Printf("[backend] FolderDialog() -> open dialog")
 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Select a folder",
 	})
+	if err != nil {
+		log.Printf("[backend] FolderDialog() failed: %v", err)
+	}
+	if dir != "" {
+		log.Printf("[backend] FolderDialog() -> %q", dir)
+	}
 	return dir, err
 }
 
 func (a *App) ReadDir(path string) ([]types.FileItem, error) {
+	log.Printf("[backend] ReadDir(path=%q)", path)
 	entries, err := os.ReadDir(path)
 	if err != nil {
+		log.Printf("[backend] ReadDir(%q) failed: %v", path, err)
 		return nil, err
 	}
 
@@ -142,6 +168,7 @@ func (a *App) ReadDir(path string) ([]types.FileItem, error) {
 			IsDir: entry.IsDir(),
 		})
 	}
+	log.Printf("[backend] ReadDir(%q) -> %d entries", path, len(items))
 	return items, nil
 }
 
@@ -150,39 +177,74 @@ func (a *App) Greet(name string) string {
 }
 
 func (a *App) ReadFile(path string) (string, error) {
+	log.Printf("[backend] ReadFile(path=%q)", path)
 	data, err := os.ReadFile(path)
 	if err != nil {
+		log.Printf("[backend] ReadFile(%q) failed: %v", path, err)
 		return "", err
 	}
+	logContent(fmt.Sprintf("[backend] ReadFile(%q) -> ok", path), string(data))
 	return string(data), nil
 }
 
 func (a *App) Quit() {
+	log.Printf("[backend] Quit()")
 	runtime.Quit(a.ctx)
 }
 
 func (a *App) CreateFile(path string) error {
+	log.Printf("[backend] CreateFile(path=%q)", path)
 	f, err := os.Create(path)
 	if err != nil {
+		log.Printf("[backend] CreateFile(%q) failed: %v", path, err)
 		return err
 	}
+	log.Printf("[backend] CreateFile(%q) -> ok", path)
 	return f.Close()
 }
 
 func (a *App) CreateFolder(path string) error {
-	return os.MkdirAll(path, 0o755)
+	log.Printf("[backend] CreateFolder(path=%q)", path)
+	err := os.MkdirAll(path, 0o755)
+	if err == nil {
+		log.Printf("[backend] CreateFolder(%q) -> ok", path)
+	} else {
+		log.Printf("[backend] CreateFolder(%q) failed: %v", path, err)
+	}
+	return err
 }
 
 func (a *App) DeletePath(path string) error {
-	return os.RemoveAll(path)
+	log.Printf("[backend] DeletePath(path=%q)", path)
+	err := os.RemoveAll(path)
+	if err == nil {
+		log.Printf("[backend] DeletePath(%q) -> ok", path)
+	} else {
+		log.Printf("[backend] DeletePath(%q) failed: %v", path, err)
+	}
+	return err
 }
 
 func (a *App) RenamePath(oldPath, newPath string) error {
-	return a.Rename(oldPath, newPath)
+	log.Printf("[backend] RenamePath(old=%q new=%q)", oldPath, newPath)
+	err := a.Rename(oldPath, newPath)
+	if err == nil {
+		log.Printf("[backend] RenamePath(%q -> %q) ok", oldPath, newPath)
+	} else {
+		log.Printf("[backend] RenamePath(%q -> %q) failed: %v", oldPath, newPath, err)
+	}
+	return err
 }
 
 func (a *App) Delete(path string) error {
-	return os.RemoveAll(path)
+	log.Printf("[backend] Delete(path=%q)", path)
+	err := os.RemoveAll(path)
+	if err == nil {
+		log.Printf("[backend] Delete(%q) -> ok", path)
+	} else {
+		log.Printf("[backend] Delete(%q) failed: %v", path, err)
+	}
+	return err
 }
 
 func (a *App) Rename(oldPath, newPath string) error {
@@ -274,26 +336,45 @@ func (a *App) stopWatcherInternal() {
 
 func (a *App) WriteFile(path string, content string) error {
 	// 0644 gives read/write permissions to the owner, and read permissions to everyone else
-	return os.WriteFile(path, []byte(content), 0o644)
+	logContent(fmt.Sprintf("[backend] WriteFile(path=%q)", path), content)
+	err := os.WriteFile(path, []byte(content), 0o644)
+	if err == nil {
+		log.Printf("[backend] WriteFile(%q) -> ok (%d bytes)", path, len(content))
+	} else {
+		log.Printf("[backend] WriteFile(%q) failed: %v", path, err)
+	}
+	return err
 }
 
 func (a *App) ReadFileBytes(path string) ([]byte, error) {
-	return os.ReadFile(path)
+	log.Printf("[backend] ReadFileBytes(path=%q)", path)
+	data, err := os.ReadFile(path)
+	if err == nil {
+		log.Printf("[backend] ReadFileBytes(%q) -> ok (%d bytes)", path, len(data))
+	} else {
+		log.Printf("[backend] ReadFileBytes(%q) failed: %v", path, err)
+	}
+	return data, err
 }
 
 func (a *App) ReadImageFile(path string) (string, error) {
+	log.Printf("[backend] ReadImageFile(path=%q)", path)
 	bytes, err := os.ReadFile(path)
 	if err != nil {
+		log.Printf("[backend] ReadImageFile(%q) failed: %v", path, err)
 		return "", err
 	}
+	log.Printf("[backend] ReadImageFile(%q) -> ok (%d bytes -> base64)", path, len(bytes))
 	// Safely encode direct binary bytes to base64 string
 	return base64.StdEncoding.EncodeToString(bytes), nil
 }
 
 // InspectAndReadFile analyzes a file and safely prepares it for frontend consumption
 func (a *App) InspectAndReadFile(path string) (*types.FileResponse, error) {
+	log.Printf("[backend] InspectAndReadFile(path=%q)", path)
 	file, err := os.Open(path)
 	if err != nil {
+		log.Printf("[backend] InspectAndReadFile(%q) failed to open: %v", path, err)
 		return nil, err
 	}
 	defer file.Close()
@@ -303,6 +384,7 @@ func (a *App) InspectAndReadFile(path string) (*types.FileResponse, error) {
 	n, err := file.Read(buffer)
 	if err != nil && n == 0 {
 		// Completely empty files default directly to the text editor
+		log.Printf("[backend] InspectAndReadFile(%q) -> empty file, category=editor", path)
 		return &types.FileResponse{Category: "editor", Content: ""}, nil
 	}
 
@@ -338,14 +420,17 @@ func (a *App) InspectAndReadFile(path string) (*types.FileResponse, error) {
 			category = "binary"
 		}
 	}
+	log.Printf("[backend] InspectAndReadFile(%q) -> mime=%q ext=%q category=%s", path, mimeType, ext, category)
 
 	// 3. Package the payload securely based on the determined viewer category
 	if category == "editor" || category == "spreadsheet" {
 		// Read the entire file as a normal text layout
 		fullBytes, err := os.ReadFile(path)
 		if err != nil {
+			log.Printf("[backend] InspectAndReadFile(%q) failed reading content: %v", path, err)
 			return nil, err
 		}
+		logContent(fmt.Sprintf("[backend] InspectAndReadFile(%q) -> ok (category=%s)", path, category), string(fullBytes))
 		return &types.FileResponse{
 			Category: category,
 			Content:  string(fullBytes),
@@ -358,6 +443,7 @@ func (a *App) InspectAndReadFile(path string) (*types.FileResponse, error) {
 	// was slow and pointless, and looked like the app was "stuck loading"
 	// a file it was actually just about to refuse to show.
 	if category == "binary" {
+		log.Printf("[backend] InspectAndReadFile(%q) -> binary, content omitted", path)
 		return &types.FileResponse{Category: category, Content: ""}, nil
 	}
 

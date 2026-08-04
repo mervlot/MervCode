@@ -183,6 +183,11 @@ export interface EditorSettings {
 
   // ── Terminal ──
   defaultShell: string;
+  terminalFontSize: number;
+  terminalFontFamily: string;
+  terminalCursorBlink: boolean;
+  terminalScrollback: number;
+  terminalHeight: number;
 
   // ── Advanced ──
   maxTokenizationLineLength: number;
@@ -191,4 +196,7 @@ export interface EditorSettings {
   useTabStops: boolean;
   wordBasedSuggestions: "off" | "currentDocument" | "matchingDocuments" | "allDocuments";
   semanticTokens: boolean;
+  roundedSelection: boolean;
+  hideCursorInOverviewRuler: boolean;
+  colorDecorators: boolean;
 }
