@@ -10,9 +10,17 @@ import { LSPConnection, type ConnectionSnapshot } from "./connection";
 // ============================================================================
 
 const connections = new Map<string, LSPConnection>();
+const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const IDLE_DISPOSE_MS = 120_000;
 
 export function getConnection(lang: string, root: string): LSPConnection {
   const key = `${lang}::${root}`;
+  const idleTimer = idleTimers.get(key);
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimers.delete(key);
+  }
+
   let conn = connections.get(key);
   if (!conn) {
     conn = new LSPConnection(lang, root);
@@ -27,6 +35,33 @@ export function getConnectionByKey(key: string): LSPConnection | undefined {
 
 export function listConnectionSnapshots(): ConnectionSnapshot[] {
   return Array.from(connections.values()).map((conn) => conn.snapshot());
+}
+
+export function releaseConnectionWhenIdle(conn: LSPConnection): void {
+  const key = conn.connectionId;
+  if (idleTimers.has(key)) return;
+
+  const timer = setTimeout(() => {
+    idleTimers.delete(key);
+    if (conn.snapshot().openDocuments.length > 0) return;
+    conn.dispose();
+    connections.delete(key);
+    console.log(`[lsp] disposed idle connection ${key}`);
+  }, IDLE_DISPOSE_MS);
+
+  idleTimers.set(key, timer);
+}
+
+export function disposeAllConnections(): void {
+  for (const timer of idleTimers.values()) {
+    clearTimeout(timer);
+  }
+  idleTimers.clear();
+
+  for (const conn of connections.values()) {
+    conn.dispose();
+  }
+  connections.clear();
 }
 
 /**

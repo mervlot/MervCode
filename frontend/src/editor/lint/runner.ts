@@ -46,9 +46,20 @@ export function registerLinter(
   let disposed = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let generation = 0;
+  let contentVersion = 0;
+  let inFlight = false;
+  let pendingAfterFlight = false;
 
   async function run() {
+    if (disposed) return;
+    if (inFlight) {
+      pendingAfterFlight = true;
+      return;
+    }
+
+    inFlight = true;
     const myGeneration = ++generation;
+    const myContentVersion = contentVersion;
     const filePath = model.uri.fsPath;
     const content = model.getValue();
 
@@ -70,13 +81,31 @@ export function registerLinter(
     // The model may have been disposed, or a newer run started, while the
     // Go call was in flight - never let a stale result clobber markers for
     // content the user has already moved past.
-    if (disposed || myGeneration !== generation || model.isDisposed()) return;
+    if (
+      disposed ||
+      myGeneration !== generation ||
+      myContentVersion !== contentVersion ||
+      model.isDisposed()
+    ) {
+      inFlight = false;
+      if (pendingAfterFlight && !disposed) {
+        pendingAfterFlight = false;
+        scheduleRun();
+      }
+      return;
+    }
 
     monaco.editor.setModelMarkers(
       model,
       ownerId,
       diagnostics.map((d) => toMarker(d, lang)),
     );
+
+    inFlight = false;
+    if (pendingAfterFlight && !disposed) {
+      pendingAfterFlight = false;
+      scheduleRun();
+    }
   }
 
   function scheduleRun() {
@@ -84,7 +113,10 @@ export function registerLinter(
     timer = setTimeout(() => void run(), LINT_DEBOUNCE_MS);
   }
 
-  const changeSub = model.onDidChangeContent(scheduleRun);
+  const changeSub = model.onDidChangeContent(() => {
+    contentVersion++;
+    scheduleRun();
+  });
   scheduleRun();
 
   return () => {

@@ -102,6 +102,7 @@ export default function EditorArea({
 
   useEffect(() => {
     if (!language || language === "plaintext") return;
+    let cancelled = false;
 
     // Monaco has four concrete TypeScript-family IDs, but the backend exposes
     // one shared `typescript` toolchain. Prompt/check the canonical toolchain
@@ -115,16 +116,26 @@ export default function EditorArea({
 
     CheckLanguageTools(toolchainLang)
       .then((status) => {
+        if (cancelled) return;
         const needsPrompt =
           !status.languageInstalled ||
           (!status.toolsInstalled && (status.missingTools?.length ?? 0) > 0);
         if (needsPrompt) {
           setToolchainLang(toolchainLang);
+        } else {
+          setToolchainLang((current) =>
+            current === toolchainLang ? null : current,
+          );
         }
       })
       .catch((err) => {
+        if (cancelled) return;
         console.warn(`[toolchain] check failed for ${toolchainLang}:`, err);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [language, activePath]);
 
   return (

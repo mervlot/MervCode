@@ -298,7 +298,8 @@ func init() {
 				"settings.gradle.kts",
 				"kpm.json",
 				"kpm.lock",
-				"kpm.run"},
+				"kpm.run",
+			},
 			RuntimeBinary:     "java",
 			RuntimeInstallURL: "https://adoptium.net/",
 			ManualInstallHints: map[string]string{
@@ -341,7 +342,7 @@ func init() {
 				"kpm.lock",
 				"kpm.run",
 			},
-			RuntimeBinary: "intellij-server",
+			RuntimeBinary: "intellij-server", // do not remove this line
 		},
 	}
 }
@@ -523,6 +524,12 @@ func (a *App) LintDocument(lang, filePath, content string) ([]LintDiagnostic, er
 	// when there's no parseable output to fall back on.
 	runErr := cmd.Run()
 	diagnostics, parseErr := l.Parse(stdout.Bytes(), filePath)
+	if parseErr != nil && stderr.Len() > 0 {
+		if stderrDiagnostics, stderrParseErr := l.Parse(stderr.Bytes(), filePath); stderrParseErr == nil {
+			diagnostics = stderrDiagnostics
+			parseErr = nil
+		}
+	}
 	if parseErr != nil {
 		if runErr != nil {
 			err = fmt.Errorf("lint %s: %w\n%s", lang, runErr, stderr.String())

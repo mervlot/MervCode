@@ -14,9 +14,10 @@ import useFileOps from "../hooks/useFileOps";
 import { useEditorSettings } from "../hooks/useEditorSettings";
 
 // Utilities
-import { Quit } from "../../wailsjs/go/main/App";
+import { Quit, StopLSPBridge } from "../../wailsjs/go/main/App";
 import { EventsOn } from "../../wailsjs/runtime/runtime";
 import { detectLang } from "../editor/detectLang.js";
+import { disposeAllConnections } from "../editor/lsp/connectionRegistry";
 import { loadWorkspaceState, saveWorkspaceState } from "../lib/persistence.js";
 import type { FileTab, WorkspaceRoot } from "../types";
 
@@ -262,6 +263,20 @@ export default function Home() {
       }),
     );
     return () => unsubs.forEach((fn) => fn());
+  }, []);
+
+  useEffect(() => {
+    function disposeLanguageSessions() {
+      disposeAllConnections();
+      void StopLSPBridge().catch((err) => {
+        console.warn("[lsp] bridge shutdown during page unload failed:", err);
+      });
+    }
+
+    window.addEventListener("pagehide", disposeLanguageSessions);
+    return () => {
+      window.removeEventListener("pagehide", disposeLanguageSessions);
+    };
   }, []);
 
   function requestQuit() {

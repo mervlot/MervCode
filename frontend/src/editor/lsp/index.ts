@@ -1,6 +1,10 @@
 import * as monaco from "monaco-editor";
 import type { LSPConnection } from "./connection";
-import { getConnection, resolveProjectRoot } from "./connectionRegistry";
+import {
+  getConnection,
+  releaseConnectionWhenIdle,
+  resolveProjectRoot,
+} from "./connectionRegistry";
 import { wireDocumentSync } from "./documentSync";
 import {
   registerProviders,
@@ -94,7 +98,10 @@ export function openLSPDocument(
     clearDocumentConnection(uri);
     const conn = connection;
     if (conn) {
-      void conn.waitUntilReady().then(() => conn.closeDocument(uri));
+      void conn.waitUntilReady().then(() => {
+        conn.closeDocument(uri);
+        releaseConnectionWhenIdle(conn);
+      });
     }
     monaco.editor.setModelMarkers(model, `lsp-${languageId}`, []);
   };

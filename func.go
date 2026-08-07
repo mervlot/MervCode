@@ -76,8 +76,12 @@ func (a *App) StartWatcher(rootPath string) error {
 		if err != nil {
 			return nil // Skip items with access noise instead of crashing
 		}
-		if info.IsDir() && !strings.Contains(path, ".git") && !strings.Contains(path, "node_modules") {
+		if info.IsDir() && shouldWatchWorkspaceDir(path) {
 			_ = watcher.Add(path)
+			return nil
+		}
+		if info.IsDir() {
+			return filepath.SkipDir
 		}
 		return nil
 	})
@@ -111,7 +115,7 @@ func (a *App) StartWatcher(rootPath string) error {
 				// If a new directory layout pops up, subscribe recursively automatically
 				if event.Has(fsnotify.Create) {
 					if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
-						_ = watcher.Add(event.Name)
+						_ = addWorkspaceWatchDir(watcher, event.Name)
 					}
 				}
 
@@ -135,6 +139,31 @@ func (a *App) StartWatcher(rootPath string) error {
 	}()
 
 	return nil
+}
+
+func shouldWatchWorkspaceDir(path string) bool {
+	name := strings.ToLower(filepath.Base(path))
+	switch name {
+	case ".git", "node_modules", "dist", "build", "target", ".gradle", ".idea", ".kotlin", "wailsjs":
+		return false
+	default:
+		return true
+	}
+}
+
+func addWorkspaceWatchDir(watcher *fsnotify.Watcher, root string) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() {
+			return nil
+		}
+		if !shouldWatchWorkspaceDir(path) {
+			return filepath.SkipDir
+		}
+		return watcher.Add(path)
+	})
 }
 
 func (a *App) FolderDialog() (string, error) {

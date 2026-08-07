@@ -3,10 +3,8 @@ import { openLSPDocument } from "../../lsp";
 import { registerLinter } from "../../lint";
 import { FormatDocument } from "../../../../wailsjs/go/main/App";
 
-// Requires jdtls (Eclipse JDT Language Server) on PATH — see the
-// "java" entry in toolchain.go for install instructions. No external
-// formatter is wired up yet; format-on-save/format-document for Java
-// isn't available until one is added.
+// Uses the bundled JDTLS runtime under runtime/java and the configured
+// google-java-format/Checkstyle backend tooling from toolchain.go.
 export const java: MonacoLanguage = {
   id: "java",
 

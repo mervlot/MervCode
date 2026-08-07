@@ -3,10 +3,8 @@ import { openLSPDocument } from "../../lsp";
 import { registerLinter } from "../../lint";
 import { FormatDocument } from "../../../../wailsjs/go/main/App";
 
-// Requires kotlin-language-server on PATH — see the "kotlin" entry in
-// toolchain.go for install instructions. No external formatter is wired
-// up yet; format-on-save/format-document for Kotlin isn't available
-// until one is added.
+// Uses the bundled Kotlin LSP runtime under runtime/kotlin and the
+// configured ktfmt/ktlint backend tooling from toolchain.go.
 export const kotlin: MonacoLanguage = {
   id: "kotlin",
 

@@ -155,6 +155,13 @@ func (a *App) startLSPBridge() error {
 // StopLSPBridge shuts the bridge down (called on app shutdown).
 func (a *App) StopLSPBridge() {
 	bridge.mu.Lock()
+	for _, info := range bridge.running {
+		if info.Status == "running" {
+			log.Printf("[LSP bridge] stopping %s server during bridge shutdown (root=%s pid=%d)", info.Lang, info.Root, info.Pid)
+			info.cancel()
+		}
+	}
+	bridge.sessions = make(map[string]*lspSession)
 	defer bridge.mu.Unlock()
 	if bridge.server != nil {
 		_ = bridge.server.Close()
@@ -329,6 +336,7 @@ func (a *App) handleLSPWebSocket(w http.ResponseWriter, r *http.Request) {
 		cancel:    cancel,
 	}
 	bridge.mu.Lock()
+	stopDuplicateLSPServersLocked(token, sess.lang, sess.root)
 	bridge.running[token] = info
 	bridge.mu.Unlock()
 	emitLSPServerEvent(bridge.ctx, "lsp:serverStarted", info)
@@ -375,6 +383,18 @@ func (a *App) handleLSPWebSocket(w http.ResponseWriter, r *http.Request) {
 	emitLSPServerEvent(bridge.ctx, "lsp:serverStopped", info)
 
 	log.Printf("[LSP bridge] %s session ended (root=%s, status=%s)", sess.lang, sess.root, status)
+}
+
+func stopDuplicateLSPServersLocked(currentToken, lang, root string) {
+	for token, info := range bridge.running {
+		if token == currentToken || info.Status != "running" {
+			continue
+		}
+		if info.Lang == lang && info.Root == root {
+			log.Printf("[LSP bridge] stopping previous %s server for root=%s before replacing it (old pid=%d)", lang, root, info.Pid)
+			info.cancel()
+		}
+	}
 }
 
 func emitLSPServerEvent(ctx context.Context, event string, info *LSPServerInfo) {

@@ -143,6 +143,24 @@ export default function ExplorerPanel({
   } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<RootNode | null>(null);
+  const openDirsRef = useRef<Record<string, boolean>>({});
+  const cacheRef = useRef<Record<string, FileItem[]>>({});
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshRunningRef = useRef(false);
+  const refreshQueuedPathRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    rootRef.current = root;
+  }, [root]);
+
+  useEffect(() => {
+    openDirsRef.current = openDirs;
+  }, [openDirs]);
+
+  useEffect(() => {
+    cacheRef.current = cache;
+  }, [cache]);
 
   useEffect(() => {
     const saved = loadWorkspaceState();
@@ -184,13 +202,14 @@ export default function ExplorerPanel({
 
     const unsubscribe = EventsOn("workspace-changed", (data) => {
       console.log("File system event caught:", data);
-      void refreshExplorer();
+      scheduleRefreshForPath(data?.path);
     });
 
     return () => {
       if (unsubscribe) unsubscribe();
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
-  }, [root, openDirs, cache]);
+  }, [root?.path]);
 
   // "Reveal in Explorer" — Home.tsx dispatches this event from the tab context
   // menu; expand every ancestor directory of the target path and scroll to it.
@@ -247,6 +266,54 @@ export default function ExplorerPanel({
       );
   }, [root, cache]);
 
+  function scheduleRefreshForPath(path?: string) {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const targetPath = path ? dirname(path) : root.path;
+    refreshQueuedPathRef.current = targetPath.startsWith(root.path)
+      ? targetPath
+      : root.path;
+
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => {
+      void flushRefreshQueue();
+    }, 250);
+  }
+
+  async function flushRefreshQueue() {
+    if (refreshRunningRef.current) return;
+
+    const path = refreshQueuedPathRef.current;
+    refreshQueuedPathRef.current = null;
+    if (!path) return;
+
+    refreshRunningRef.current = true;
+    try {
+      await refreshPath(path);
+    } finally {
+      refreshRunningRef.current = false;
+      if (refreshQueuedPathRef.current) {
+        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = setTimeout(() => {
+          void flushRefreshQueue();
+        }, 100);
+      }
+    }
+  }
+
+  async function refreshPath(path: string) {
+    const root = rootRef.current;
+    if (!root) return;
+
+    if (path === root.path || !cacheRef.current[path]) {
+      await refreshExplorer();
+      return;
+    }
+
+    await refreshDir(path);
+  }
+
   async function refreshDir(path: string) {
     try {
       const items = await ReadDir(path);
@@ -260,7 +327,7 @@ export default function ExplorerPanel({
 
       await Promise.all(
         sortedItems
-          .filter((item) => item.isDir && openDirs[item.path])
+          .filter((item) => item.isDir && openDirsRef.current[item.path])
           .map((item) => refreshDir(item.path)),
       );
     } catch (error) {
@@ -269,6 +336,7 @@ export default function ExplorerPanel({
   }
 
   async function refreshExplorer() {
+    const root = rootRef.current;
     if (!root) return;
 
     try {
@@ -292,23 +360,13 @@ export default function ExplorerPanel({
 
       await Promise.all(
         sortedItems
-          .filter((item) => item.isDir && openDirs[item.path])
+          .filter((item) => item.isDir && openDirsRef.current[item.path])
           .map((item) => refreshDir(item.path)),
       );
     } catch (error) {
       console.error("Failed to refresh explorer:", error);
     }
   }
-
-  useEffect(() => {
-    if (!root) return;
-
-    const interval = setInterval(() => {
-      void refreshExplorer();
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [root, openDirs]);
 
   async function loadRoot(path: string) {
     try {
